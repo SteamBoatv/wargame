@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>🏰 皇城对决</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="cv"></canvas>
+
+<div id="topbar">
+  <div class="side"><span>🏰</span><div class="hpwrap"><div class="hpfill" id="hpL"></div></div><span id="money">💰150</span><span class="inc" id="incomeTxt">+8/秒</span><span id="wTag"></span></div>
+  <div class="mid">
+    <button class="iconbtn" id="btnEvolve" title="攒经验进化时代">⬆️0%</button>
+    <button class="iconbtn on" id="btnFollow" title="自动跟随战线">🎯</button>
+    <button class="iconbtn" id="btnSpeed" title="游戏速度">⏩×1</button>
+    <button class="iconbtn" id="btnPause" title="暂停">⏸️</button>
+    <button class="iconbtn" id="btnVol" title="音量大小">🔊100</button>
+    <button class="iconbtn" id="btnMute" title="静音开关">🔊</button>
+  </div>
+  <div class="side"><span class="inc">敌军</span><div class="hpwrap red"><div class="hpfill" id="hpR"></div></div><span>🏯</span></div>
+</div>
+
+<div id="queuebar"></div>
+<div id="toast"></div>
+<div id="unitbar"></div>
+
+<div class="overlay" id="menu">
+  <div class="panel">
+    <h1>🏰 皇城远征 👹</h1>
+    <p>Roguelike 远征：在分叉地图上步步推进，每站敌人性格各异——<br>
+       攻破沿途营地收集强化，最终踏平<b>魔王要塞</b>！<br>
+       金币自动累积 → 生产士兵 → 沿 S 形山路自动进军 · 单指拖动 · 双指缩放 · 🎯跟随</p>
+    <div class="units-tip">
+      <span>🗡️剑士 克长枪</span><span>🔱长枪 克重盾/爆破</span><span>🛡️盾卫 挡箭减伤</span><span>🏹弓手 克步兵/修士</span><span>✝️修士 治疗友军</span><span>🛢重炮 自由部署压制</span>
+    </div>
+    <p style="margin:0">选择远征难度：</p>
+    <div class="diffs">
+      <button class="obtn" data-diff="easy">😊 简单</button>
+      <button class="obtn" data-diff="normal">🙂 普通</button>
+      <button class="obtn" data-diff="hard">😈 困难</button>
+    </div>
+    <div class="diffs">
+      <button class="obtn" id="btnPvp">⚔️ 好友对战（P2P）</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="pvpov">
+  <div class="panel">
+    <h1>⚔️ 好友对战</h1>
+    <p id="pvpStatus"></p>
+    <p id="pvpLink" style="word-break:break-all;font-size:12px"></p>
+    <div class="diffs">
+      <button class="obtn" id="btnPvpCopy">📋 复制邀请链接</button>
+      <button class="obtn" id="btnPvpStart" style="display:none">⚔️ 开始对战</button>
+      <button class="obtn" id="btnPvpCancel">↩️ 返回</button>
+    </div>
+    <p style="font-size:12px">把链接发给好友，对方打开即自动进房。P2P 直连，双方各据一端；<br>少数网络（公司网/部分手机热点）可能打洞失败，换个网络即可。</p>
+  </div>
+</div>
+
+<div class="overlay hidden" id="mapov">
+  <div class="panel">
+    <h1>🗺️ 远征地图</h1>
+    <p id="mapInfo"></p>
+    <div id="mapNodes"></div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="rewardov">
+  <div class="panel">
+    <h1 id="rewardTitle">🎁 战利品</h1>
+    <div id="perkCards" class="diffs"></div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="runover">
+  <div class="panel">
+    <h1 id="runTitle"></h1>
+    <p id="runDesc"></p>
+    <div class="diffs">
+      <button class="obtn" id="btnRunAgain">🔁 再次远征</button>
+      <button class="obtn" id="btnRunMenu">🎚️ 主菜单</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="gameover">
+  <div class="panel">
+    <div id="goTitle"></div>
+    <div class="diffs">
+      <button class="obtn" id="btnAgain">🔁 再来一局</button>
+      <button class="obtn" id="btnMenu">🎚️ 主菜单</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="pauseov">
+  <div class="panel">
+    <h1>⏸️ 已暂停</h1>
+    <div class="diffs"><button class="obtn" id="btnResume">▶️ 继续</button></div>
+  </div>
+</div>
+
+<script src="js/core.js"></script>
+<script src="js/data.js"></script>
+<script src="js/world.js"></script>
+<script src="js/camera.js"></script>
+<script src="js/audio_assets.js"></script>
+<script src="js/game.js"></script>
+<script src="js/render.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/net.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
