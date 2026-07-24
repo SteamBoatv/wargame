@@ -14,7 +14,6 @@
   <div class="mid">
     <button class="iconbtn" id="btnEvolve" title="攒经验进化时代">⬆️0%</button>
     <button class="iconbtn on" id="btnFollow" title="自动跟随战线">🎯</button>
-    <button class="iconbtn" id="btnSpeed" title="游戏速度">⏩×1</button>
     <button class="iconbtn" id="btnPause" title="暂停">⏸️</button>
     <button class="iconbtn" id="btnVol" title="音量大小">🔊100</button>
     <button class="iconbtn" id="btnMute" title="静音开关">🔊</button>
@@ -26,8 +25,17 @@
 <div id="toast"></div>
 <div id="unitbar"></div>
 <div id="emoteWrap" style="display:none">
+  <button class="iconbtn" id="btnSpeedReq" title="游戏倍速">
+    <span>⏩</span><span class="sv" id="spdVal">×1</span>
+  </button>
   <div id="emoteBar" class="hidden"></div>
   <button class="iconbtn" id="btnEmote" title="快速表情">😄</button>
+</div>
+
+<div id="spdAsk" class="hidden">
+  <span id="spdAskTxt"></span>
+  <button class="obtn sm" id="btnSpdOk">✅ 同意</button>
+  <button class="obtn sm" id="btnSpdNo">❌ 拒绝</button>
 </div>
 
 <div class="overlay" id="menu">

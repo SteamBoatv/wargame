@@ -49,6 +49,8 @@ async function netOpen(code,isHost){
     if(mt.k==='hi'){NET.peer=NET.peer||'host';netLobbyStatus();}
     else if(mt.k==='start'&&!NET.isHost)netStartGuest(mt);
     else if(mt.k==='end'&&!NET.isHost)netShowEnd(mt.winner===1,null);
+    else if(mt.k==='spdReq')showSpdAsk(mt.to);
+    else if(mt.k==='spdRes')onSpdRes(mt);
   });
 }
 async function netCreate(){
@@ -129,6 +131,10 @@ function netStartCommon(def,weather,events,isHost){
   newGame(stage);
   G.pvp=true;
   G.pvpHost=isHost;
+  G.pvpSpeed=1;
+  spdPend=0;spdCoolUntil=0;
+  $('spdAsk').classList.add('hidden');
+  updateSpeedBtn();
   G._umap={};G._pmap={};
   G.uidSeq=0;G.pidSeq=0;
   mode='play';
@@ -179,6 +185,7 @@ function netHostSnap(dt){
   try{
     NET.sendSnap({
       t:Math.round(G.t*10)/10,
+      sp:Math.round((G.pvpSpeed||1)*100)/100,
       m0:G.money|0,m1:G.aiMoney|0,
       i0:G.income,i1:G.aiIncome,
       e0:G.era,e1:G.aiEra,
@@ -204,6 +211,7 @@ function netHostSnap(dt){
 function netApplySnap(sn){
   if(!G||!G.pvp)return;
   if(Math.abs(G.t-sn.t)>0.5)G.t=sn.t;
+  if(sn.sp&&sn.sp!==G.pvpSpeed){G.pvpSpeed=sn.sp;updateSpeedBtn();}
   G.money=sn.m1;G.income=sn.i1;
   if(G.era!==sn.e1){G.era=sn.e1;buildUnitButtons();} /* 时代变更必须重建兵种栏（修复客机进化后无法出兵） */
   G.xp=sn.x1;G.incomeLvl=sn.il1;
@@ -300,6 +308,79 @@ function netApplyFx(f){
   else if(f.k==='bn')showBanner(f.x);
 }
 
+/* ---- 倍速申请（+0.25/次，对方同意才生效；被拒 1 分钟冷却，次数不限） ---- */
+let spdPend=0, spdCoolUntil=0, spdAskTo=0, spdAskTimer=null;
+function updateSpeedBtn(){
+  const el=$('spdVal');
+  if(!el)return;
+  if(G&&G.pvp)el.textContent=spdPend?'⌛':'×'+(G.pvpSpeed||1);
+  else el.textContent='×'+gameSpeed;
+}
+function speedBtnTap(){
+  if(!G||mode!=='play'||G.over)return;
+  if(!G.pvp){
+    gameSpeed=gameSpeed>=3?1:gameSpeed+1;
+    updateSpeedBtn();
+    sClick();
+    return;
+  }
+  const now=performance.now();
+  if(spdPend){toast('⏳ 提速申请已发出，等待对方回应…');return;}
+  if(now<spdCoolUntil){
+    toast('🚫 被拒绝后 1 分钟内不能再次申请（还剩 '+Math.ceil((spdCoolUntil-now)/1000)+' 秒）');
+    return;
+  }
+  const to=Math.round(((G.pvpSpeed||1)+0.25)*100)/100;
+  spdPend=to;
+  NET.sendMeta({k:'spdReq',to});
+  toast('⏩ 已申请提速至 ×'+to+'，等待对方同意…');
+  updateSpeedBtn();
+  sClick();
+}
+function showSpdAsk(to){
+  if(!G||!G.pvp||G.over)return;
+  spdAskTo=to;
+  $('spdAskTxt').textContent='⏩ 对方申请把战斗速度提升至 ×'+to;
+  $('spdAsk').classList.remove('hidden');
+  sFlag();
+  clearTimeout(spdAskTimer);
+  spdAskTimer=setTimeout(()=>{ /* 12 秒未回应：不算拒绝，不触发冷却 */
+    if(!$('spdAsk').classList.contains('hidden')){
+      $('spdAsk').classList.add('hidden');
+      if(NET)NET.sendMeta({k:'spdRes',ok:false,to:spdAskTo,noPen:true});
+    }
+  },12000);
+}
+function answerSpd(ok){
+  clearTimeout(spdAskTimer);
+  $('spdAsk').classList.add('hidden');
+  if(!NET)return;
+  NET.sendMeta({k:'spdRes',ok,to:spdAskTo});
+  if(ok){
+    applySpeedLocal(spdAskTo);
+    toast('⏩ 已同意，战斗速度提升至 ×'+spdAskTo);
+  }else{
+    toast('已拒绝对方的提速申请');
+  }
+}
+function onSpdRes(mt){
+  if(mt.ok){
+    applySpeedLocal(mt.to);
+    toast('⏩ 对方同意！战斗速度提升至 ×'+mt.to);
+  }else if(mt.noPen){
+    toast('⏳ 对方未回应提速申请，可再次申请');
+  }else{
+    spdCoolUntil=performance.now()+60000;
+    toast('🚫 对方拒绝了提速申请，1 分钟后可再次申请');
+  }
+  spdPend=0;
+  updateSpeedBtn();
+}
+function applySpeedLocal(to){
+  if(G)G.pvpSpeed=to;
+  updateSpeedBtn();
+}
+
 /* ---- 快速表情（仅固定表情，不能发文字；EMOTES 表在 data.js） ---- */
 let lastEmoteT=0;
 function sendEmoteIdx(i){
@@ -322,6 +403,8 @@ function showEmote(side,i){
 
 /* ---- 结算 ---- */
 function netShowEnd(won,reason){
+  clearTimeout(spdAskTimer);
+  $('spdAsk').classList.add('hidden');
   if(G)G.over=won?1:-1;
   $('goTitle').textContent=(won?'🎉 胜利！':'💀 战败…')+(reason?'（'+reason+'）':'');
   $('btnAgain').style.display='none';

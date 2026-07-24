@@ -39,7 +39,8 @@ function refreshHUD(){
     lastIncomeLvlShown=G.incomeLvl;
     $('inc-cost').textContent=G.incomeLvl>=INCOME_MAX_LVL?'MAX':'💰'+incomeCost(G.incomeLvl);
   }
-  $('emoteWrap').style.display=(G&&G.pvp&&mode==='play'&&!G.over)?'flex':'none';
+  $('emoteWrap').style.display=(G&&mode==='play'&&!G.over)?'flex':'none';
+  $('btnEmote').style.display=(G&&G.pvp)?'':'none';
   const tb=$('btn-turret');
   if(tb){
     const tcost=$('turret-cost');
@@ -139,13 +140,12 @@ $('btnPause').addEventListener('pointerdown',e=>{
   setPaused(!paused);
 });
 $('btnResume').addEventListener('pointerdown',e=>{e.preventDefault();setPaused(false);});
-$('btnSpeed').addEventListener('pointerdown',e=>{
+$('btnSpeedReq').addEventListener('pointerdown',e=>{
   e.preventDefault();
-  if(G&&G.pvp){toast('⚔️ 对战中不能调速');return;}
-  gameSpeed=gameSpeed>=3?1:gameSpeed+1;
-  $('btnSpeed').textContent='⏩×'+gameSpeed;
-  sClick();
+  speedBtnTap();
 });
+$('btnSpdOk').addEventListener('pointerdown',e=>{e.preventDefault();answerSpd(true);});
+$('btnSpdNo').addEventListener('pointerdown',e=>{e.preventDefault();answerSpd(false);});
 const VOL_STEPS=[[1,'🔊100'],[0.66,'🔉66'],[0.33,'🔈33']];
 let volIdx=0;
 $('btnVol').addEventListener('pointerdown',e=>{

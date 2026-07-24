@@ -24,7 +24,13 @@ function frame(ts){
   if(!G)return;
   if(mode==='play'&&!paused&&!G.over){
     if(G.pvp&&NET&&!NET.isHost)netGuestTick(dt);
-    else for(let i=0;i<gameSpeed&&!G.over;i++)update(dt);
+    else if(G.pvp){
+      /* 主机：按协商倍速分步模拟，保证高倍速下判定稳定 */
+      const sp=G.pvpSpeed||1, n=Math.ceil(sp);
+      for(let i=0;i<n&&!G.over;i++)update(dt*sp/n);
+    }else{
+      for(let i=0;i<gameSpeed&&!G.over;i++)update(dt);
+    }
   }
   else if(G.over){updateFloats(dt);G.shake=Math.max(0,G.shake-dt*1.6);}
   if(followMode&&mode==='play'&&!paused&&!G.over)followCam(dt*gameSpeed);
