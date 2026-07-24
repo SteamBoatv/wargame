@@ -86,7 +86,7 @@ function endPointer(e){
     const it=pointers.values(), a=it.next().value, b=it.next().value;
     pinch0={d:Math.max(20,Math.hypot(a.x-b.x,a.y-b.y)),z:cam.z,mx:(a.x+b.x)/2,my:(a.y+b.y)/2};
   }else if(pointers.size<2)pinch0=null;
-  if(pointers.size===0&&placing&&placePos&&!mmDragging)placeTurret(placePos.x,placePos.y);
+  if(pointers.size===0&&placing&&placePos&&!mmDragging)placeAt(placePos.x,placePos.y);
   if(pointers.size===0)mmDragging=false;
 }
 cv.addEventListener('pointerup',endPointer);

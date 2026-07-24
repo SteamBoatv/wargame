@@ -61,8 +61,55 @@ function drawBase(side){
     ctx.fillRect(x,y,w*r,h);
   }
 }
+function drawBuilding(u,p,st){
+  ctx.fillStyle='rgba(0,0,0,.25)';
+  ctx.beginPath(); ctx.ellipse(p.x,p.y+4,42,12,0,0,TAU); ctx.fill();
+  ctx.save();
+  ctx.translate(p.x,p.y);
+  if(u.dying){const k=Math.min(1,u.dying/0.45);ctx.globalAlpha=1-k;}
+  const col=u.side?'red':'blue';
+  const img=(st.bk!=='barricade'&&ASSETS.bldg&&ASSETS.bldg[col])?ASSETS.bldg[col][st.bk==='tower'?'tower':'house']:null;
+  if(img){
+    const w=st.bk==='tower'?64:78;
+    const h=w*img.height/img.width;
+    ctx.drawImage(img,-w/2,-h+10,w,h);
+  }else if(st.bk==='barricade'){
+    /* 手绘木拒马：横跨路面的交叉木桩 */
+    ctx.strokeStyle='#5d3f20';ctx.lineWidth=7;ctx.lineCap='round';
+    for(let i=-2;i<=2;i++){
+      const bx=i*26;
+      ctx.beginPath();ctx.moveTo(bx-11,6);ctx.lineTo(bx+11,-27);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(bx+11,6);ctx.lineTo(bx-11,-27);ctx.stroke();
+    }
+    ctx.strokeStyle='#8a6b45';ctx.lineWidth=5;
+    ctx.beginPath();ctx.moveTo(-64,-10);ctx.lineTo(64,-10);ctx.stroke();
+    ctx.strokeStyle=u.side?'rgba(255,64,64,.6)':'rgba(46,125,255,.6)';ctx.lineWidth=3;
+    ctx.beginPath();ctx.moveTo(-60,4);ctx.lineTo(60,4);ctx.stroke();
+  }else{
+    ctx.font=em(44);ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(st.emoji,0,-18);
+  }
+  ctx.restore();
+  if(!u.dying){
+    const w=64,h=6,r=Math.max(0,u.hp/u.max);
+    const by=st.bk==='tower'?120:78;
+    ctx.fillStyle='rgba(0,0,0,.45)';
+    ctx.fillRect(p.x-w/2-1,p.y-by,w+2,h+2);
+    ctx.fillStyle=u.side?'#ff5a5a':'#43d675';
+    ctx.fillRect(p.x-w/2,p.y-by+1,w*r,h);
+    if(u.type==='b_workshop'){
+      const t='+'+Math.round(wsYield(u))+'/秒';
+      ctx.font='bold 13px system-ui,sans-serif';
+      ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.lineWidth=3;ctx.strokeStyle='rgba(20,20,20,.7)';
+      ctx.strokeText(t,p.x,p.y-62);
+      ctx.fillStyle='#ffd76a';ctx.fillText(t,p.x,p.y-62);
+    }
+  }
+}
 function drawUnit(u,p){
   const st=UNITS[u.type], dir=u.side?-1:1;
+  if(st.cls==='bldg'){drawBuilding(u,p,st);return;}
   ctx.fillStyle='rgba(0,0,0,.2)';
   ctx.beginPath(); ctx.ellipse(p.x,p.y+3,13,5,0,0,TAU); ctx.fill();
   ctx.strokeStyle=u.side?'rgba(255,64,64,.75)':'rgba(46,125,255,.75)';
@@ -352,12 +399,33 @@ function draw(){
     else drawUnit(s.o,s.p);
   }
   if(placing&&placePos&&G&&mode==='play'){
-    ctx.globalAlpha=0.55;
-    drawTurretBody(placePos.x,placePos.y,-Math.PI/2,0);
-    ctx.globalAlpha=1;
-    ctx.strokeStyle='rgba(255,255,255,0.55)'; ctx.lineWidth=2; ctx.setLineDash([8,8]);
-    ctx.beginPath(); ctx.arc(placePos.x,placePos.y,TURRET.range,0,TAU); ctx.stroke();
-    ctx.setLineDash([]);
+    if(placingType==='turret'){
+      ctx.globalAlpha=0.55;
+      drawTurretBody(placePos.x,placePos.y,-Math.PI/2,0);
+      ctx.globalAlpha=1;
+      ctx.strokeStyle='rgba(255,255,255,0.55)'; ctx.lineWidth=2; ctx.setLineDash([8,8]);
+      ctx.beginPath(); ctx.arc(placePos.x,placePos.y,TURRET.range,0,TAU); ctx.stroke();
+      ctx.setLineDash([]);
+    }else{
+      /* 建筑虚影：吸附到道路中心，绿=可建 红=不可建 */
+      const P=PLACEABLES[placingType];
+      const pr=nearestPath(placePos.x,placePos.y);
+      const ok=pr&&pr.d<=76*pr.wf&&pr.sep<=5&&pr.s<=L-260;
+      const gp=pr?pathPos(pr.s):placePos;
+      ctx.globalAlpha=0.65;
+      ctx.font=em(46);ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(P.emoji,gp.x,gp.y-20);
+      ctx.globalAlpha=1;
+      ctx.strokeStyle=ok?'rgba(120,255,140,.85)':'rgba(255,90,90,.85)';
+      ctx.lineWidth=3;ctx.setLineDash([6,6]);
+      ctx.beginPath();ctx.arc(gp.x,gp.y,34,0,TAU);ctx.stroke();
+      ctx.setLineDash([]);
+      if(placingType==='tower'){
+        ctx.strokeStyle='rgba(255,255,255,.4)';ctx.lineWidth=2;ctx.setLineDash([8,8]);
+        ctx.beginPath();ctx.arc(gp.x,gp.y,UNITS.b_tower.range,0,TAU);ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
   }
   if(G){
     for(const p of G.projs)drawProj(p);

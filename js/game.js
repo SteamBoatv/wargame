@@ -5,20 +5,24 @@ function newGame(stage){
   stage=stage||makeStage(null);
   buildWorld(stage.mapDef||null);
   const per=stage.per;
+  const c0=stage.cmdr0||(RUN&&RUN.cmdr)||'marshal';
+  const c1=stage.cmdr1||'marshal';
+  const isPvp=stage.node&&stage.node.t==='pvp';
   G={stage,per,t:0,over:0,
+     cmdr0:c0,cmdr1:c1,
      weather:WEATHERS[stage.weather||'clear'],
      events:(stage.events||[]).map(e=>({...e})),
      piles:[],bountyT:0,
      money:150+(RUN?RUN.mods.gold+RUN.goldCarry:0),
-     income:8+(RUN?RUN.mods.income:0),
+     income:COMMANDERS[c0].income+(RUN?RUN.mods.income:0),
      incomeLvl:0,era:1,
      xp:RUN?Math.round(EVOLVE_XP*RUN.mods.xp0):0,
-     aiMoney:150,aiIncome:8*stage.aiIncomeMul,aiIncomeLvl:0,aiDecide:2,aiPlan:null,
+     aiMoney:150,aiIncome:isPvp?COMMANDERS[c1].income:8*stage.aiIncomeMul,aiIncomeLvl:0,aiDecide:2,aiPlan:null,
      aiEra:per.aiEra||1,aiXp:0,
      baseHp:[BASE_HP,BASE_HP],
      units:[],projs:[],floats:[],queue:[],aiQueue:[],shake:0,spawnCnt:[0,0],
      flags:CUR_DEF.flags.map(fs=>({s:fs*L,owner:-1,prog:0})),
-     turrets:[],turretCds:[0,0],booms:[],
+     turrets:[],pcds:{turret:[0,0],barricade:[0,0],tower:[0,0],workshop:[0,0]},booms:[],
      streakN:0,streakT:-9,lastWarn:-9,banner:null,flash:0};
   if(RUN)RUN.goldCarry=0;
   placing=false; placePos=null;
@@ -68,7 +72,8 @@ function damage(e,dmg,bySide,attacker){
   if(e.hp<=0){
     e.dying=1e-4;
     const c=UNITS[e.type].cost;
-    let reward=Math.round(c*KILL_REWARD);
+    const km=bySide===0?cmdrOf(0).killMult:(G.pvp?cmdrOf(1).killMult:KILL_REWARD);
+    let reward=Math.round(c*km);
     if(G.bountyT>0)reward*=2;
     const p=unitPos(e);
     if(bySide===0){
@@ -118,7 +123,7 @@ function updateFlags(dt){
   for(const f of G.flags){
     let p=0,a=0;
     for(const u of G.units){
-      if(u.dying)continue;
+      if(u.dying||UNITS[u.type].cls==='bldg')continue;
       if(Math.abs(u.s-f.s)<FLAG_RANGE){if(u.side)a++;else p++;}
     }
     if(p>0&&a===0)f.prog=Math.min(1,f.prog+dt/FLAG_TIME);
@@ -175,7 +180,7 @@ function fire(u,st,tgt,onBase){
     if(onBase)hitBase(enemySide,st.dmg);
     else{
       const r=rollDmg(st,tgt,u,u.side);
-      tgt.s=clamp(tgt.s+(u.side?-4:4),10,L-10);
+      if(UNITS[tgt.type].cls!=='bldg')tgt.s=clamp(tgt.s+(u.side?-4:4),10,L-10);
       applyDamage(tgt,r,u.side,u);
     }
     sHit();
@@ -200,7 +205,7 @@ function updateUnits(dt){
     if(st.cls==='heal'){
       let ally=null,worst=0.999;
       for(const a of us){
-        if(a.side!==u.side||a.dying||a===u)continue;
+        if(a.side!==u.side||a.dying||a===u||UNITS[a.type].cls==='bldg')continue;
         if(Math.abs(a._lat-u._lat)>60)continue;
         if(Math.abs(a.s-u.s)<=st.range){
           const r=a.hp/a.max;
@@ -220,7 +225,7 @@ function updateUnits(dt){
       }else{
         let blocked=false;
         for(const a of us){
-          if(a===u||a.side!==u.side||a.dying)continue;
+          if(a===u||a.side!==u.side||a.dying||UNITS[a.type].cls==='bldg')continue;
           if(Math.abs(a._lat-u._lat)>=18)continue;
           const gp=(a.s-u.s)*dir;
           if(gp>0&&gp<20){blocked=true;break;}
@@ -267,7 +272,7 @@ function updateUnits(dt){
     }else{
       let blocked=false;
       for(const a of us){
-        if(a===u||a.side!==u.side||a.dying)continue;
+        if(a===u||a.side!==u.side||a.dying||UNITS[a.type].cls==='bldg')continue;
         if(Math.abs(a._lat-u._lat)>=18)continue;
         const gp=(a.s-u.s)*dir;
         if(gp>0&&gp<20){blocked=true;break;}
@@ -363,7 +368,7 @@ function aiPick(){
     counts={};
     for(const k of per.roster)counts[k]=(counts[k]||0)+1;
     keys=Object.keys(counts);
-  }else keys=ERA_ROSTER[G.aiEra];
+  }else keys=cmdrOf(1).roster[G.aiEra];
   const reach=G.aiMoney+G.aiIncome*6;
   const w={};
   for(const k of keys)if(UNITS[k].cost<=reach)
@@ -394,8 +399,11 @@ function aiPick(){
 
 function update(dt){
   G.t+=dt;
-  G.money+=(G.income+FLAG_INCOME*ownedFlags(0))*dt;
-  G.aiMoney+=(G.aiIncome+FLAG_INCOME*ownedFlags(1))*dt;
+  let wy0=0,wy1=0;
+  for(const u of G.units)
+    if(!u.dying&&u.type==='b_workshop'){if(u.side)wy1+=wsYield(u);else wy0+=wsYield(u);}
+  G.money+=(G.income+FLAG_INCOME*ownedFlags(0)+wy0)*dt;
+  G.aiMoney+=(G.aiIncome+FLAG_INCOME*ownedFlags(1)+wy1)*dt;
   updQueue(G.queue,dt,0);
   updQueue(G.aiQueue,dt,1);
   if(!G.pvp)aiThink(dt);
@@ -403,8 +411,10 @@ function update(dt){
   updateProjs(dt);
   updateFlags(dt);
   updateTurrets(dt);
-  G.turretCds[0]=Math.max(0,G.turretCds[0]-dt);
-  G.turretCds[1]=Math.max(0,G.turretCds[1]-dt);
+  for(const k in G.pcds){
+    G.pcds[k][0]=Math.max(0,G.pcds[k][0]-dt);
+    G.pcds[k][1]=Math.max(0,G.pcds[k][1]-dt);
+  }
   for(const b of G.booms)b.t+=dt;
   G.booms=G.booms.filter(b=>b.t<0.9);
   /* 天气：酷热持续掉血（最低保留 12% 生命，不会渴死） */
@@ -490,24 +500,73 @@ function updatePiles(dt){
   }
 }
 
-/* ---------------- 重炮（玩家能力：任意位置部署，限时，圆形射程） ---------------- */
-let placing=false, placePos=null;
-function togglePlace(){
+/* ---------------- 放置系统（重炮 + 工程师建筑：拒马/箭塔/工坊） ---------------- */
+let placing=false, placePos=null, placingType='turret';
+function togglePlace(ty){
   if(!G||mode!=='play'||paused||G.over)return;
-  if(!placing&&(G.turretCds[0]>0||G.money<TURRET.cost))return;
-  placing=!placing; placePos=null;
-  toast(placing?'🎯 按住拖动选位，松手部署重炮（再点按钮取消）':'已取消部署');
+  ty=ty||'turret';
+  if(placing&&placingType===ty){placing=false;placePos=null;toast('已取消部署');return;}
+  const P=PLACEABLES[ty];
+  if(G.pcds[ty][0]>0||G.money<P.cost)return;
+  placing=true; placingType=ty; placePos=null;
+  toast('🎯 按住拖动选位，松手部署'+P.name+(P.road?'（必须建在道路上）':'')+'，再点按钮取消');
   sClick();
 }
-function placeTurret(wx,wy){
-  placing=false; placePos=null;
+function nearestPath(x,y){
+  let bi=-1,bd=1e18;
+  for(let i=0;i<PATH.table.length;i+=4){
+    const p=PATH.table[i], dx=p.x-x, dy=p.y-y, d=dx*dx+dy*dy;
+    if(d<bd){bd=d;bi=i;}
+  }
+  if(bi<0)return null;
+  const p=PATH.table[bi];
+  return {s:bi*PATH.STEP,d:Math.sqrt(bd),sep:p.sep,wf:p.wf};
+}
+function countBldg(side,unitType){
+  let n=0;
+  for(const u of G.units)if(u.side===side&&!u.dying&&u.type===unitType)n++;
+  return n;
+}
+function buildingPlaceCore(side,ty,s,localToast){
+  const P=PLACEABLES[ty], ut=P.unit, st=UNITS[ut];
+  const money=side?G.aiMoney:G.money;
+  if(money<P.cost||G.pcds[ty][side]>0)return;
+  if(countBldg(side,ut)>=P.maxAlive){if(localToast)toast('⚠️ '+P.name+'最多同时存在 '+P.maxAlive+' 座');return;}
+  if(side===0&&s>L-260){if(localToast)toast('⚠️ 离敌方城堡太近');return;}
+  if(side===1&&s<260)return;
+  if(side)G.aiMoney-=P.cost; else G.money-=P.cost;
+  G.pcds[ty][side]=P.cd;
+  G.units.push({uid:(G.uidSeq=(G.uidSeq||0)+1),side,type:ut,s,off:0,
+    hp:st.hp,max:st.hp,cd:rand(0.3,0.8),walk:0,lunge:0,dying:0,moving:false,
+    kills:0,star:false,atkT:9,animT:0});
+  if(localToast)toast('🔨 '+P.name+'建造完成'+(ty==='workshop'?'（此位置产量 +'+Math.round(wsYield({side,s}))+'/秒）':''));
+  sBoom();
+}
+function placeAt(wx,wy){
+  placing=false;
+  const ty=placingType;
+  placePos=null;
   if(!G||G.over)return;
+  const P=PLACEABLES[ty];
+  if(P.road){
+    const pr=nearestPath(wx,wy);
+    if(!pr||pr.d>76*pr.wf){toast('⚠️ '+P.name+'只能建在道路上');return;}
+    if(pr.sep>5){toast('⚠️ 岔路口无法施工');return;}
+    if(G.pvp&&NET&&!NET.isHost){
+      if(G.money<P.cost||G.pcds[ty][0]>0)return;
+      if(pr.s>L-260){toast('⚠️ 离敌方城堡太近');return;}
+      NET.sendCmd({a:'p',t:ty,x:Math.round(WORLD_W-wx),y:Math.round(WORLD_H-wy)});
+      toast('🔨 建造指令已发送');
+      return;
+    }
+    buildingPlaceCore(0,ty,pr.s,true);
+    return;
+  }
   if(G.pvp&&NET&&!NET.isHost){
-    /* 客机：本地预校验后把坐标镜像回主机坐标系发指令 */
-    if(G.money<TURRET.cost||G.turretCds[0]>0)return;
+    if(G.money<TURRET.cost||G.pcds.turret[0]>0)return;
     if(wx<30||wx>WORLD_W-30||wy<30||wy>WORLD_H-30){toast('⚠️ 超出战场边界');return;}
     if(Math.hypot(wx-BASE1.x,wy-BASE1.y)<200){toast('⚠️ 离敌方城堡太近');return;}
-    netSendTurret(wx,wy);
+    NET.sendCmd({a:'p',t:'turret',x:Math.round(WORLD_W-wx),y:Math.round(WORLD_H-wy)});
     toast('🛡 部署指令已发送');
     return;
   }
@@ -515,12 +574,12 @@ function placeTurret(wx,wy){
 }
 function turretPlaceCore(side,wx,wy,localToast){
   const money=side?G.aiMoney:G.money;
-  if(money<TURRET.cost||G.turretCds[side]>0)return;
+  if(money<TURRET.cost||G.pcds.turret[side]>0)return;
   if(wx<30||wx>WORLD_W-30||wy<30||wy>WORLD_H-30){if(localToast)toast('⚠️ 超出战场边界');return;}
   const eb=side?BASE0:BASE1;
   if(Math.hypot(wx-eb.x,wy-eb.y)<200){if(localToast)toast('⚠️ 离敌方城堡太近');return;}
   if(side)G.aiMoney-=TURRET.cost; else G.money-=TURRET.cost;
-  G.turretCds[side]=TURRET.cd*(side?1:(RUN?RUN.mods.turCd:1));
+  G.pcds.turret[side]=TURRET.cd*(side?1:(RUN?RUN.mods.turCd:1));
   G.turrets.push({side,x:wx,y:wy,ang:side?Math.PI/2:-Math.PI/2,cd:0.8,life:TURRET.life,flash:0});
   if(localToast)toast('🛡 重炮部署完成，持续 '+TURRET.life+' 秒');
   sBoom();
@@ -566,7 +625,7 @@ function followCam(dt){
   let tx=BASE0.x, ty=BASE0.y-110;
   if(G){
     let best=null;
-    for(const u of G.units)if(u.side===0&&!u.dying&&(!best||u.s>best.s))best=u;
+    for(const u of G.units)if(u.side===0&&!u.dying&&UNITS[u.type].cls!=='bldg'&&(!best||u.s>best.s))best=u;
     if(best){const p=pathPos(best.s);tx=p.x;ty=p.y;}
   }
   const k=Math.min(1,dt*2.2);

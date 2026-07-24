@@ -44,6 +44,10 @@ canvas.bi{width:27px;height:27px;image-rendering:pixelated}
 .mnode{position:relative;z-index:1;min-width:0;font-size:13px;padding:6px 3px}
 .mnode.done,.mnode:disabled{opacity:.45;filter:grayscale(.85)}
 .pcard{display:flex;flex-direction:column;align-items:center;gap:2px;width:152px;padding:8px 6px}
+.cmbtn{display:flex;flex-direction:column;align-items:center;gap:2px;width:200px;padding:7px 6px;opacity:.7}
+.cmbtn small{font-size:11px;font-weight:600;line-height:1.35}
+.cmbtn .pic{font-size:24px;line-height:1.2}
+.cmbtn.sel{opacity:1;box-shadow:0 0 10px 3px rgba(255,215,106,.75)}
 .pcard .pic{font-size:26px;line-height:1.2}
 .pcard small{font-size:11px;font-weight:600;line-height:1.35}
 #goTitle{font-size:clamp(30px,7vw,50px)}

@@ -34,6 +34,7 @@ async function netOpen(code,isHost){
     NET.peer=id;
     netLobbyStatus();
     if(NET.isHost)sendMeta({k:'hi'});
+    netSendCmdrPick();
     sFlag();
   });
   room.onPeerLeave(()=>{
@@ -46,7 +47,8 @@ async function netOpen(code,isHost){
   onFx(f=>{if(NET&&!NET.isHost)netApplyFx(f);});
   onMeta(mt=>{
     if(!NET)return;
-    if(mt.k==='hi'){NET.peer=NET.peer||'host';netLobbyStatus();}
+    if(mt.k==='hi'){NET.peer=NET.peer||'host';netLobbyStatus();netSendCmdrPick();}
+    else if(mt.k==='cmdr'){NET.peerCmdr=mt.c;netLobbyStatus();}
     else if(mt.k==='start'&&!NET.isHost)netStartGuest(mt);
     else if(mt.k==='end'&&!NET.isHost)netShowEnd(mt.winner===1,null);
     else if(mt.k==='spdReq')showSpdAsk(mt.to);
@@ -59,6 +61,7 @@ async function netCreate(){
   $('pvpStatus').textContent='正在创建房间…';
   try{await netOpen(netCode(),true);}
   catch(e){$('pvpStatus').textContent='创建失败：'+(e&&e.message||e);return;}
+  NET.myCmdr=selCmdr;
   netLobbyStatus();
 }
 async function netJoin(code){
@@ -67,6 +70,7 @@ async function netJoin(code){
   $('pvpStatus').textContent='正在加入房间 '+code+' …';
   try{await netOpen(code,false);}
   catch(e){$('pvpStatus').textContent='加入失败：'+(e&&e.message||e);return;}
+  NET.myCmdr=selCmdr;
   netLobbyStatus();
 }
 function showPvpLobby(){
@@ -77,10 +81,15 @@ function showPvpLobby(){
 function netLink(){
   return location.origin+location.pathname+'?pvp='+NET.code;
 }
+function netSendCmdrPick(){
+  if(NET&&NET.peer&&NET.sendMeta)NET.sendMeta({k:'cmdr',c:NET.myCmdr||'marshal'});
+}
 function netLobbyStatus(){
   if(!NET)return;
   $('pvpLink').textContent=NET.isHost?netLink():('房间号：'+NET.code);
   $('btnPvpCopy').style.display=NET.isHost?'':'none';
+  const foe=NET.peerCmdr?COMMANDERS[NET.peerCmdr]:null;
+  $('pvpFoeCmdr').textContent=NET.peer?(foe?('对方指挥官：'+foe.icon+' '+foe.name):'对方选择指挥官中…'):'';
   if(NET.peer){
     $('pvpStatus').textContent='✅ 双方已就位'+(NET.isHost?'，可以开战':'，等待房主开始…');
     $('btnPvpStart').style.display=NET.isHost?'':'none';
@@ -105,11 +114,13 @@ function netStartMatch(){
   const weather=Math.random()<0.5?'clear':wks[(Math.random()*wks.length)|0];
   const events=[];
   if(Math.random()<0.7)events.push({at:45+Math.random()*60,type:['gold','meteor','bounty'][(Math.random()*3)|0],done:false});
-  NET.sendMeta({k:'start',def,weather,events});
-  netStartCommon(def,weather,events,true);
+  const c0=NET.myCmdr||'marshal', c1=NET.peerCmdr||'marshal';
+  NET.sendMeta({k:'start',def,weather,events,c0,c1});
+  netStartCommon(def,weather,events,true,c0,c1);
 }
 function netStartGuest(mt){
-  netStartCommon(mt.def,mt.weather,mt.events||[],false);
+  /* 客机镜像：自己是本地 side0，所以自己的指挥官是 mt.c1 */
+  netStartCommon(mt.def,mt.weather,mt.events||[],false,mt.c1||'marshal',mt.c0||'marshal');
 }
 function mirrorDef(def){
   return {
@@ -120,10 +131,11 @@ function mirrorDef(def){
     flags:def.flags.map(f=>1-f),
   };
 }
-function netStartCommon(def,weather,events,isHost){
+function netStartCommon(def,weather,events,isHost,myCmdr,foeCmdr){
   RUN=null; /* 对战不带远征强化，保证公平 */
   const stage={
     node:{t:'pvp'},per:PVP_PER,weather,
+    cmdr0:myCmdr||'marshal',cmdr1:foeCmdr||'marshal',
     events:isHost?events:[],
     mapDef:isHost?def:mirrorDef(def),
     aiIncomeMul:1,hpMul:1,dmgMul:1,gobColor:'red',
@@ -151,11 +163,10 @@ function netStartCommon(def,weather,events,isHost){
 function netSendBuy(k){NET.sendCmd({a:'b',k});}
 function netSendIncome(){NET.sendCmd({a:'i'});}
 function netSendEvolve(){NET.sendCmd({a:'e'});}
-function netSendTurret(wx,wy){NET.sendCmd({a:'t',x:Math.round(WORLD_W-wx),y:Math.round(WORLD_H-wy)});}
 function netApplyCmd(c){
   if(c.a==='b'){
     const k=c.k;
-    if(!ERA_ROSTER[G.aiEra].includes(k))return;
+    if(!cmdrOf(1).roster[G.aiEra].includes(k))return;
     const st=UNITS[k];
     if(G.aiMoney<st.cost||G.aiQueue.length>=QUEUE_MAX)return;
     G.aiMoney-=st.cost;
@@ -171,8 +182,12 @@ function netApplyCmd(c){
     toast('⚠️ 对方进化到了王国时代！');
     sEvolve();
     if(NET)NET.sendFx({k:'ev'});
-  }else if(c.a==='t'){
-    turretPlaceCore(1,c.x,c.y,false);
+  }else if(c.a==='p'){
+    if(!cmdrOf(1).place.includes(c.t))return;
+    if(c.t==='turret'){turretPlaceCore(1,c.x,c.y,false);return;}
+    const pr=nearestPath(c.x,c.y);
+    if(!pr||pr.d>76*pr.wf||pr.sep>5)return;
+    buildingPlaceCore(1,c.t,pr.s,false);
   }
 }
 
@@ -192,7 +207,7 @@ function netHostSnap(dt){
       x1:G.aiXp|0,il1:G.aiIncomeLvl,
       bh:[Math.round(G.baseHp[0]),Math.round(G.baseHp[1])],
       bt:Math.round(G.bountyT*10)/10,
-      tc:[Math.round(G.turretCds[0]*10)/10,Math.round(G.turretCds[1]*10)/10],
+      pc:Object.fromEntries(Object.keys(G.pcds).map(k=>[k,[Math.round(G.pcds[k][0]*10)/10,Math.round(G.pcds[k][1]*10)/10]])),
       fl:G.flags.map(f=>[f.owner,Math.round(f.prog*100)]),
       us:G.units.map(u=>[u.uid,TYPE_KEYS.indexOf(u.type),u.side,Math.round(u.s),Math.round(u.off),
         Math.round(u.hp),u.max,(u.moving?1:0)|(u.star?2:0)|(u.dying?4:0)|(u.atkT<0.4?8:0)]),
@@ -218,7 +233,7 @@ function netApplySnap(sn){
   G.aiMoney=sn.m0;G.aiEra=sn.e0;
   G.baseHp=[sn.bh[1],sn.bh[0]];
   G.bountyT=sn.bt;
-  G.turretCds=[sn.tc[1],sn.tc[0]];
+  if(sn.pc)for(const k in sn.pc)if(G.pcds[k])G.pcds[k]=[sn.pc[k][1],sn.pc[k][0]];
   G.flags.forEach((f,i)=>{
     const a=sn.fl[i];
     if(!a)return;

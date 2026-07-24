@@ -46,6 +46,7 @@ const TS_UNITS={
   lancer:{run:'lancer_run',idle:'lancer_idle',atk:'lancer_atk'},
   archer:{run:'archer_run',idle:'archer_idle',atk:'archer_atk'},
   monk:{run:'monk_run',idle:'monk_idle',atk:'monk_atk'},
+  pawn:{run:'pawn_run',idle:'pawn_idle',atk:'pawn_atk'},
 };
 ASSETS.ts={blue:{},black:{},red:{},purple:{},misc:{decos:[]}};
 ASSETS.gob={red:{},purple:{}};
@@ -93,6 +94,12 @@ let MUSIC=null, meleeAlt=false, lastCoinS=0;
     const im=new Image(), idx=i-1;
     im.onload=()=>{ASSETS.ts.misc.decos[idx]=im;};
     im.src='assets/ts/deco_0'+i+'.png';
+  }
+  ASSETS.bldg={blue:{},red:{}};
+  for(const bc of ['blue','red'])for(const bk of ['tower','house']){
+    const im=new Image();
+    im.onload=()=>{ASSETS.bldg[bc][bk]=im;};
+    im.src='assets/ts/bldg_'+bc+'_'+bk+'.png';
   }
   const au={melee1:'assets/audio/melee1.wav',melee2:'assets/audio/melee2.wav',
             magic:'assets/audio/magic.wav',coin:'assets/audio/coin.wav',bow:'assets/audio/bow.wav'};

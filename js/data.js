@@ -17,17 +17,62 @@ const UNITS={
   torch:{emoji:'🔥',name:'火把狂徒',cls:'inf',   gob:'torch', era:1,w:30,cost:45, hp:95, dmg:12,cd:0.7,range:28, speed:95,build:1.0},
   tnt:{emoji:'🧨',name:'TNT投手', cls:'ranged',gob:'tnt',   era:1,w:16,cost:110,hp:85, dmg:22,cd:1.8,range:180,speed:55,build:1.9,proj:'dynamite',splash:60},
   barrel:{emoji:'💣',name:'滚桶兵', cls:'bomb',  gob:'barrel',era:1,w:14,cost:90, hp:140,dmg:46,cd:1,  range:26, speed:85,build:1.6,splash:55},
+  /* ---- 攻城工程师兵种 ---- */
+  militia:{emoji:'🪓',name:'民兵', cls:'inf',   ts:'pawn',era:1,w:28,cost:40, hp:90, dmg:10,cd:0.8,range:28, speed:66,build:1.0},
+  crossbow:{emoji:'🏹',name:'弩卫', cls:'ranged',ts:'archer',era:1,w:20,cost:95, hp:80, dmg:14,cd:1.4,range:200,speed:52,build:2.0,proj:'arrow'},
+  ram:{emoji:'🔨',name:'撞锤兵',cls:'siege', ts:'guard', era:1,w:14,cost:150,hp:260,dmg:20,cd:1.2,range:30, speed:44,build:2.4},
+  militia2:{emoji:'🪓',name:'黑铁民兵',cls:'inf',  ts:'pawn',era:2,w:28,cost:60, hp:150,dmg:17,cd:0.8,range:28,speed:66,build:1.2},
+  crossbow2:{emoji:'🏹',name:'黑铁弩卫',cls:'ranged',ts:'archer',era:2,w:20,cost:145,hp:130,dmg:23,cd:1.3,range:210,speed:52,build:2.2,proj:'arrow'},
+  ram2:{emoji:'🔨',name:'黑铁撞锤',cls:'siege',ts:'guard',era:2,w:14,cost:230,hp:430,dmg:33,cd:1.2,range:30,speed:42,build:2.6},
+  /* ---- 建筑（速度为0的路上实体，占位阻路可被攻击） ---- */
+  b_barricade:{emoji:'🚧',name:'拒马', cls:'bldg',bk:'barricade',era:1,w:0,cost:120,hp:900,dmg:0, cd:9,  range:0,  speed:0,build:0},
+  b_tower:{emoji:'🗼',name:'箭塔', cls:'bldg',bk:'tower',    era:1,w:0,cost:220,hp:450,dmg:14,cd:0.9,range:230,speed:0,build:0,proj:'arrow'},
+  b_workshop:{emoji:'🏭',name:'工坊', cls:'bldg',bk:'workshop', era:1,w:0,cost:200,hp:300,dmg:0, cd:9,  range:0,  speed:0,build:0},
 };
 const ERA_ROSTER={
   1:['sword','spear','archer','shield','monk'],
   2:['sword2','spear2','archer2','shield2','monk2'],
 };
-const COUNTER={ /* 克制环：剑克枪 → 枪克盾/爆破 → 盾挡箭 → 弓克步兵/修士 */
+const COUNTER={ /* 克制环：剑克枪 → 枪克盾/爆破 → 盾挡箭 → 弓克步兵/修士；攻城克建筑 */
   inf:{spear:1.5},
   spear:{tank:1.6,bomb:1.6},
   ranged:{inf:1.5,heal:1.5},
+  siege:{bldg:2.5,tank:1.3},
+  bomb:{bldg:1.8},
 };
-const CLS_NAME={inf:'步兵',spear:'枪兵',ranged:'远程',tank:'重甲',heal:'修士',bomb:'爆破'};
+const CLS_NAME={inf:'步兵',spear:'枪兵',ranged:'远程',tank:'重甲',heal:'修士',bomb:'爆破',siege:'攻城',bldg:'建筑'};
+/* ---------------- 指挥官 ---------------- */
+const COMMANDERS={
+  marshal:{
+    icon:'⚖️',name:'王国元帅',
+    desc:'均衡之道：五兵种克制环 · 挖矿经济 · 限时重炮',
+    income:8,killMult:0.35,mining:true,
+    roster:{1:['sword','spear','archer','shield','monk'],2:['sword2','spear2','archer2','shield2','monk2']},
+    place:['turret'],
+  },
+  engineer:{
+    icon:'🏗️',name:'攻城工程师',
+    desc:'阵地之王：拒马锁路 · 箭塔火力 · 前线工坊经济（越靠前产量越高）',
+    income:6,killMult:0.3,mining:false,
+    roster:{1:['militia','crossbow','ram'],2:['militia2','crossbow2','ram2']},
+    place:['barricade','tower','workshop','turret'],
+  },
+};
+function cmdrOf(side){
+  const k=side?(G&&G.cmdr1)||'marshal':(G&&G.cmdr0)||'marshal';
+  return COMMANDERS[k]||COMMANDERS.marshal;
+}
+/* 可放置物（turret=限时重炮，其余为建筑实体） */
+const PLACEABLES={
+  turret:{icon:null,emoji:'🛢',name:'重炮',cost:250,cd:45,road:false},
+  barricade:{emoji:'🚧',name:'拒马',cost:120,cd:20,road:true,maxAlive:2,unit:'b_barricade'},
+  tower:{emoji:'🗼',name:'箭塔',cost:220,cd:35,road:true,maxAlive:2,unit:'b_tower'},
+  workshop:{emoji:'🏭',name:'工坊',cost:200,cd:25,road:true,maxAlive:3,unit:'b_workshop'},
+};
+function wsYield(u){ /* 工坊产量：越靠近敌方越高 2~6/秒 */
+  const f=u.side?1-u.s/L:u.s/L;
+  return 2+4*clamp((f-0.08)/0.84,0,1);
+}
 const BASE_HP=900, KILL_REWARD=0.35, QUEUE_MAX=5, INCOME_STEP=3, INCOME_MAX_LVL=10;
 const EVOLVE_XP=300, EVOLVE_COST=500, FLAG_INCOME=3, FLAG_RANGE=90, FLAG_TIME=3;
 const TURRET={cost:250,cd:45,life:25,range:260,dmg:35,splash:55,turn:1.6,fireCd:2.2,shellSp:300};

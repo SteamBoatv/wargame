@@ -21,7 +21,7 @@ function refreshHUD(){
   $('hpL').style.width=(G.baseHp[0]/BASE_HP*100)+'%';
   $('hpR').style.width=(G.baseHp[1]/BASE_HP*100)+'%';
   const lock=mode!=='play'||!!G.over||paused;
-  for(const k of ERA_ROSTER[G.era]){
+  for(const k of cmdrOf(0).roster[G.era]){
     const b=$('btn-'+k);
     if(b)b.disabled=lock||G.money<UNITS[k].cost||G.queue.length>=QUEUE_MAX;
   }
@@ -33,25 +33,29 @@ function refreshHUD(){
     be.classList.toggle('ready',!lock&&G.xp>=EVOLVE_XP&&G.money>=EVOLVE_COST);
   }
   const ib=$('btn-inc');
-  if(G.incomeLvl>=INCOME_MAX_LVL)ib.disabled=true;
-  else ib.disabled=lock||G.money<incomeCost(G.incomeLvl);
-  if(lastIncomeLvlShown!==G.incomeLvl){
-    lastIncomeLvlShown=G.incomeLvl;
-    $('inc-cost').textContent=G.incomeLvl>=INCOME_MAX_LVL?'MAX':'💰'+incomeCost(G.incomeLvl);
+  if(ib){
+    if(G.incomeLvl>=INCOME_MAX_LVL)ib.disabled=true;
+    else ib.disabled=lock||G.money<incomeCost(G.incomeLvl);
+    if(lastIncomeLvlShown!==G.incomeLvl){
+      lastIncomeLvlShown=G.incomeLvl;
+      const ic=$('inc-cost');
+      if(ic)ic.textContent=G.incomeLvl>=INCOME_MAX_LVL?'MAX':'💰'+incomeCost(G.incomeLvl);
+    }
   }
   $('emoteWrap').style.display=(G&&mode==='play'&&!G.over)?'flex':'none';
   $('btnEmote').style.display=(G&&G.pvp)?'':'none';
-  const tb=$('btn-turret');
-  if(tb){
-    const tcost=$('turret-cost');
-    if(G.turretCds[0]>0){
-      tb.disabled=true;
-      tcost.textContent='⏳'+Math.ceil(G.turretCds[0]);
+  for(const pt of cmdrOf(0).place){
+    const b=$('btn-place-'+pt);
+    if(!b)continue;
+    const P=PLACEABLES[pt], cs=$('pc-'+pt);
+    if(G.pcds[pt][0]>0){
+      b.disabled=true;
+      if(cs)cs.textContent='⏳'+Math.ceil(G.pcds[pt][0]);
     }else{
-      tb.disabled=lock||G.money<TURRET.cost;
-      tcost.textContent='💰'+TURRET.cost;
+      b.disabled=lock||G.money<P.cost;
+      if(cs)cs.textContent='💰'+P.cost;
     }
-    tb.classList.toggle('placing',placing);
+    b.classList.toggle('placing',placing&&placingType===pt);
   }
   renderQueue();
 }
@@ -80,7 +84,8 @@ function buyIncome(){
 function buildUnitButtons(){
   const bar=$('unitbar');
   bar.innerHTML='';
-  for(const k of ERA_ROSTER[G?G.era:1]){
+  const cmdr=cmdrOf(0);
+  for(const k of cmdr.roster[G?G.era:1]){
     const st=UNITS[k];
     const b=document.createElement('button');
     b.className='ub'; b.id='btn-'+k; b.type='button';
@@ -102,22 +107,31 @@ function buildUnitButtons(){
     b.addEventListener('pointerdown',e=>{e.preventDefault();buy(k);});
     bar.appendChild(b);
   }
-  const ib=document.createElement('button');
-  ib.className='ub'; ib.id='btn-inc'; ib.type='button';
-  ib.title='提升金币收入 +'+INCOME_STEP+'/秒';
-  ib.innerHTML='<span class="be">⛏️</span><span class="bn">挖矿+'+INCOME_STEP+'</span><span class="bc" id="inc-cost">💰'+incomeCost(0)+'</span>';
-  ib.addEventListener('pointerdown',e=>{e.preventDefault();buyIncome();});
-  bar.appendChild(ib);
-  const tb=document.createElement('button');
-  tb.className='ub dark'; tb.id='btn-turret'; tb.type='button';
-  tb.title='重炮：拖到任意位置部署，圆形射程压制 '+TURRET.life+' 秒，冷却 '+TURRET.cd+' 秒';
-  tb.innerHTML='<canvas class="be bi" width="32" height="32"></canvas><span class="bn">重炮</span><span class="bc" id="turret-cost">💰'+TURRET.cost+'</span>';
-  const tc=tb.querySelector('canvas').getContext('2d');
-  tc.fillStyle='#05070a'; tc.fillRect(13,2,6,16);
-  tc.fillStyle='#191c24'; tc.beginPath(); tc.arc(16,20,10,0,Math.PI*2); tc.fill();
-  tc.fillStyle='#2c313d'; tc.beginPath(); tc.arc(16,20,6.5,0,Math.PI*2); tc.fill();
-  tb.addEventListener('pointerdown',e=>{e.preventDefault();togglePlace();});
-  bar.appendChild(tb);
+  if(cmdr.mining){
+    const ib=document.createElement('button');
+    ib.className='ub'; ib.id='btn-inc'; ib.type='button';
+    ib.title='提升金币收入 +'+INCOME_STEP+'/秒';
+    ib.innerHTML='<span class="be">⛏️</span><span class="bn">挖矿+'+INCOME_STEP+'</span><span class="bc" id="inc-cost">💰'+incomeCost(0)+'</span>';
+    ib.addEventListener('pointerdown',e=>{e.preventDefault();buyIncome();});
+    bar.appendChild(ib);
+  }
+  for(const pt of cmdr.place){
+    const P=PLACEABLES[pt];
+    const tb=document.createElement('button');
+    tb.className='ub dark'; tb.id='btn-place-'+pt; tb.type='button';
+    tb.title=P.name+(P.road?'：建在道路上':'：任意位置')+'，冷却 '+P.cd+' 秒'+(P.maxAlive?('，同时最多 '+P.maxAlive+' 座'):'');
+    if(pt==='turret'){
+      tb.innerHTML='<canvas class="be bi" width="32" height="32"></canvas><span class="bn">重炮</span><span class="bc" id="pc-turret">💰'+P.cost+'</span>';
+      const tc=tb.querySelector('canvas').getContext('2d');
+      tc.fillStyle='#05070a'; tc.fillRect(13,2,6,16);
+      tc.fillStyle='#191c24'; tc.beginPath(); tc.arc(16,20,10,0,Math.PI*2); tc.fill();
+      tc.fillStyle='#2c313d'; tc.beginPath(); tc.arc(16,20,6.5,0,Math.PI*2); tc.fill();
+    }else{
+      tb.innerHTML='<span class="be">'+P.emoji+'</span><span class="bn">'+P.name+'</span><span class="bc" id="pc-'+pt+'">💰'+P.cost+'</span>';
+    }
+    tb.addEventListener('pointerdown',e=>{e.preventDefault();togglePlace(pt);});
+    bar.appendChild(tb);
+  }
   lastIncomeLvlShown=-1;
 }
 function tryEvolve(){
@@ -400,6 +414,7 @@ document.querySelectorAll('#menu [data-diff]').forEach(b=>{
   b.addEventListener('pointerdown',e=>{
     e.preventDefault();
     newRun(b.dataset.diff);
+    RUN.cmdr=selCmdr;
     $('menu').classList.add('hidden');
     showMap();
     sClick(); startMusic();
@@ -426,6 +441,32 @@ $('btnPvpCancel').addEventListener('pointerdown',e=>{
   $('menu').classList.remove('hidden');
   mode='menu';
 });
+/* ---------------- 指挥官选择（菜单+PvP大厅共用） ---------------- */
+let selCmdr='marshal';
+function buildCmdrPick(elId){
+  const el=$(elId);
+  if(!el)return;
+  el.innerHTML='';
+  for(const key in COMMANDERS){
+    const c=COMMANDERS[key];
+    const b=document.createElement('button');
+    b.className='obtn cmbtn'+(selCmdr===key?' sel':'');
+    b.type='button';
+    b.innerHTML='<span class="pic">'+c.icon+'</span><b>'+c.name+'</b><small>'+c.desc+'</small>';
+    b.addEventListener('pointerdown',e=>{
+      e.preventDefault();
+      selCmdr=key;
+      buildCmdrPick('cmdrPickMenu');
+      buildCmdrPick('pvpCmdrPick');
+      if(typeof NET!=='undefined'&&NET){NET.myCmdr=key;netSendCmdrPick();}
+      sClick();
+    });
+    el.appendChild(b);
+  }
+}
+buildCmdrPick('cmdrPickMenu');
+buildCmdrPick('pvpCmdrPick');
+
 (function buildEmoteBar(){
   const bar=$('emoteBar');
   EMOTES.forEach((em,i)=>{
