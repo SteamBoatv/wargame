@@ -377,6 +377,26 @@ function draw(){
       }
     }
     for(const f of G.floats)drawFloat(f);
+    /* PvP 表情气泡（世界坐标，城堡旁弹出） */
+    if(G.emotes){
+      for(const eb of G.emotes)eb.t+=1/60;
+      G.emotes=G.emotes.filter(x=>x.t<2.6);
+      for(const eb of G.emotes){
+        const k=eb.t<0.22?eb.t/0.22:1;
+        const a=eb.t>2.1?Math.max(0,(2.6-eb.t)/0.5):1;
+        const y=eb.y-eb.t*10;
+        ctx.globalAlpha=a;
+        ctx.fillStyle='#fdf6e3';
+        ctx.strokeStyle='#a97f4b';
+        ctx.lineWidth=3;
+        rrectPath(eb.x-26*k,y-26*k,52*k,52*k,10*k);
+        ctx.fill();ctx.stroke();
+        ctx.font=em(34*k);
+        ctx.textAlign='center';ctx.textBaseline='middle';
+        ctx.fillText(eb.e,eb.x,y+2);
+      }
+      ctx.globalAlpha=1;
+    }
   }
   ctx.setTransform(dpr,0,0,dpr,0,0);
   if(G)drawWeather();

@@ -40,6 +40,8 @@ const WEATHERS={
   heat:{icon:'🔥',name:'酷热',dot:2.5,tint:'rgba(255,120,40,0.10)',part:'heat',desc:'士兵持续失水掉血(不会渴死)，战场更短'},
   rain:{icon:'🌧️',name:'暴雨',rangedMul:0.75,speedMul:0.9,tint:'rgba(50,70,130,0.14)',part:'rain',desc:'远程射程 -25%，移速 -10%'},
 };
+/* PvP 快速表情表 */
+const EMOTES=['😄','😡','😏','❤️','💀','😢','👍','🤝'];
 /* ---------------- 兵种家族加成（Roguelike 特训） ---------------- */
 function famOf(t){return t.replace(/2$/,'');}
 function famMod(type,k){

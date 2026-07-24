@@ -28,7 +28,8 @@ function refreshHUD(){
   const be=$('btnEvolve');
   if(G.era===2){be.textContent='👑'; be.classList.remove('ready');}
   else{
-    be.textContent='⬆️'+Math.min(100,Math.floor(G.xp/EVOLVE_XP*100))+'%';
+    const pct=Math.min(100,Math.floor(G.xp/EVOLVE_XP*100));
+    be.textContent=pct>=100?(G.money>=EVOLVE_COST?'⬆️进化!':'⬆️💰'+EVOLVE_COST):'⬆️'+pct+'%';
     be.classList.toggle('ready',!lock&&G.xp>=EVOLVE_XP&&G.money>=EVOLVE_COST);
   }
   const ib=$('btn-inc');
@@ -38,6 +39,7 @@ function refreshHUD(){
     lastIncomeLvlShown=G.incomeLvl;
     $('inc-cost').textContent=G.incomeLvl>=INCOME_MAX_LVL?'MAX':'💰'+incomeCost(G.incomeLvl);
   }
+  $('emoteWrap').style.display=(G&&G.pvp&&mode==='play'&&!G.over)?'flex':'none';
   const tb=$('btn-turret');
   if(tb){
     const tcost=$('turret-cost');
@@ -119,8 +121,9 @@ function buildUnitButtons(){
 }
 function tryEvolve(){
   if(!G||mode!=='play'||paused||G.over||G.era===2)return;
-  if(G.xp<EVOLVE_XP||G.money<EVOLVE_COST)return;
-  if(G.pvp&&NET&&!NET.isHost){netSendEvolve();sClick();return;}
+  if(G.xp<EVOLVE_XP){toast('👑 经验不足，还差 '+Math.ceil(EVOLVE_XP-G.xp)+' 点（击杀敌军获取）');return;}
+  if(G.money<EVOLVE_COST){toast('👑 进化还需 '+Math.ceil(EVOLVE_COST-G.money)+' 金币');return;}
+  if(G.pvp&&NET&&!NET.isHost){netSendEvolve();toast('👑 进化指令已发送');sClick();return;}
   if(G.pvp&&NET&&NET.isHost)NET.sendFx({k:'evh'});
   G.money-=EVOLVE_COST; G.era=2; G.flash=1;
   buildUnitButtons();
@@ -329,6 +332,7 @@ function startStage(nd){
   mode='play';
   $('mapov').classList.add('hidden');
   toast(stage.per.icon+' '+stage.per.name+(nd.t==='elite'?'（精英）':'')+' — 战斗开始！');
+  keepAwake();
   const w=WEATHERS[stage.weather];
   $('wTag').textContent=stage.weather!=='clear'?w.icon:'';
   if(stage.weather!=='clear'){
@@ -421,6 +425,20 @@ $('btnPvpCancel').addEventListener('pointerdown',e=>{
   netLeave();
   $('menu').classList.remove('hidden');
   mode='menu';
+});
+(function buildEmoteBar(){
+  const bar=$('emoteBar');
+  EMOTES.forEach((em,i)=>{
+    const b=document.createElement('button');
+    b.type='button';
+    b.textContent=em;
+    b.addEventListener('pointerdown',e=>{e.preventDefault();sendEmoteIdx(i);});
+    bar.appendChild(b);
+  });
+})();
+$('btnEmote').addEventListener('pointerdown',e=>{
+  e.preventDefault();
+  $('emoteBar').classList.toggle('hidden');
 });
 $('btnPvpCopy').addEventListener('pointerdown',e=>{
   e.preventDefault();

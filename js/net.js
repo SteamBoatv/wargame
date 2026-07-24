@@ -27,7 +27,9 @@ async function netOpen(code,isHost){
   const [sendSnap,onSnap]=room.makeAction('s');
   const [sendFx,onFx]=room.makeAction('f');
   const [sendMeta,onMeta]=room.makeAction('m');
-  NET={room,code,isHost,peer:null,sendCmd,sendSnap,sendFx,sendMeta,snapT:0};
+  const [sendEmote,onEmote]=room.makeAction('g');
+  NET={room,code,isHost,peer:null,sendCmd,sendSnap,sendFx,sendMeta,sendEmote,snapT:0};
+  onEmote(i=>{if(G&&G.pvp)showEmote(1,i|0);});
   room.onPeerJoin(id=>{
     NET.peer=id;
     netLobbyStatus();
@@ -132,6 +134,7 @@ function netStartCommon(def,weather,events,isHost){
   mode='play';
   ['pvpov','menu','mapov'].forEach(id=>$(id).classList.add('hidden'));
   toast('⚔️ 对战开始！你是蓝方（下方），摧毁对方城堡获胜');
+  keepAwake();
   const w=WEATHERS[weather];
   $('wTag').textContent=weather!=='clear'?w.icon:'';
   if(weather!=='clear'){toast(w.icon+' '+w.name+'：'+w.desc);showBanner(w.icon+' '+w.name);}
@@ -201,7 +204,9 @@ function netHostSnap(dt){
 function netApplySnap(sn){
   if(!G||!G.pvp)return;
   if(Math.abs(G.t-sn.t)>0.5)G.t=sn.t;
-  G.money=sn.m1;G.income=sn.i1;G.era=sn.e1;G.xp=sn.x1;G.incomeLvl=sn.il1;
+  G.money=sn.m1;G.income=sn.i1;
+  if(G.era!==sn.e1){G.era=sn.e1;buildUnitButtons();} /* 时代变更必须重建兵种栏（修复客机进化后无法出兵） */
+  G.xp=sn.x1;G.incomeLvl=sn.il1;
   G.aiMoney=sn.m0;G.aiEra=sn.e0;
   G.baseHp=[sn.bh[1],sn.bh[0]];
   G.bountyT=sn.bt;
@@ -293,6 +298,26 @@ function netApplyFx(f){
   else if(f.k==='ev'){toast('👑 我方进化完成！');G.flash=1;sEvolve();}
   else if(f.k==='evh'){toast('⚠️ 对方进化到了王国时代！');G.flash=1;sEvolve();}
   else if(f.k==='bn')showBanner(f.x);
+}
+
+/* ---- 快速表情（仅固定表情，不能发文字；EMOTES 表在 data.js） ---- */
+let lastEmoteT=0;
+function sendEmoteIdx(i){
+  const n=performance.now();
+  if(n-lastEmoteT<1500)return;
+  lastEmoteT=n;
+  if(NET&&NET.sendEmote){try{NET.sendEmote(i);}catch(e){}}
+  showEmote(0,i);
+  $('emoteBar').classList.add('hidden');
+}
+function showEmote(side,i){
+  if(!G)return;
+  const e=EMOTES[i]||'😄';
+  const b=side?BASE1:BASE0;
+  G.emotes=G.emotes||[];
+  G.emotes.push({x:b.x+(side?76:-76),y:b.y-70,e,t:0});
+  if(G.emotes.length>4)G.emotes.shift();
+  sClick();
 }
 
 /* ---- 结算 ---- */
