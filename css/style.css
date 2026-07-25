@@ -79,6 +79,19 @@ canvas.bi{width:27px;height:27px;image-rendering:pixelated}
 #emoteBar{display:flex;flex-direction:column;gap:2px;background:#f2e3c0;border:2px solid #a97f4b;border-radius:10px;padding:4px}
 #emoteBar.hidden{display:none}
 #emoteBar button{font-size:24px;background:none;border:none;padding:3px 8px;cursor:pointer;touch-action:manipulation;line-height:1.2}
+/* 观战：只在 body.spectating 下出现的元素 */
+.specOnly{display:none}
+body.spectating .specOnly{display:inline-flex}
+body.spectating #unitbar,body.spectating #queuebar{display:none}
+#specBadge{position:fixed;left:50%;transform:translateX(-50%);top:calc(6px + env(safe-area-inset-top));
+  z-index:31;background:rgba(24,18,8,.72);color:#ffd76a;font-size:12px;font-weight:800;
+  padding:3px 12px;border-radius:12px;pointer-events:none}
+#specBadge.hidden{display:none}
+#specEmotes{position:fixed;right:calc(8px + env(safe-area-inset-right));bottom:calc(16px + env(safe-area-inset-bottom));
+  z-index:6;display:flex;flex-direction:column-reverse;gap:5px;align-items:flex-end;pointer-events:none}
+.specbub{background:rgba(24,18,8,.7);border:2px solid #a97f4b;border-radius:14px;padding:2px 9px;
+  font-size:18px;line-height:1.4;animation:specfade 3.4s forwards}
+@keyframes specfade{0%{opacity:0;transform:translateX(14px)}8%{opacity:1;transform:none}80%{opacity:1}100%{opacity:0}}
 #toast{position:fixed;top:calc(46px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:30;display:flex;flex-direction:column;gap:4px;align-items:center;pointer-events:none}
 .tmsg{background:#f2e3c0;border:2px solid #a97f4b;color:#7a3c10;font-size:13px;font-weight:800;padding:5px 14px;border-radius:6px;white-space:nowrap;animation:tfade 3s forwards}
 @keyframes tfade{0%{opacity:0;transform:translateY(-6px)}10%{opacity:1;transform:none}80%{opacity:1}100%{opacity:0}}

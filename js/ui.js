@@ -15,6 +15,7 @@ function renderQueue(){
 }
 function refreshHUD(){
   if(!G)return;
+  const spec=!!G.spectator;
   const m='💰'+Math.floor(G.money);
   if(m!==lastMoneyTxt){lastMoneyTxt=m;$('money').textContent=m;}
   /* 含反应堆产量：工程师的经济几乎全靠工坊，不算进去 HUD 会显示成"零增长" */
@@ -23,6 +24,24 @@ function refreshHUD(){
   $('incomeTxt').textContent='+'+Math.round(G.income+FLAG_INCOME*ownedFlags(0)+wsy)+'/秒';
   $('hpL').style.width=(G.baseHp[0]/BASE_HP*100)+'%';
   $('hpR').style.width=(G.baseHp[1]/BASE_HP*100)+'%';
+  const wt0=$('wTag');
+  if(G.weatherKey&&G.weatherKey!=='clear')wt0.textContent=G.weather.icon+Math.max(0,Math.ceil(G.weatherT))+'s';
+  else if(wt0.textContent)wt0.textContent='';
+  if(spec){
+    /* 观战：上帝视角——左蓝右红，双方经济与进化全开，所有操作按钮下线 */
+    $('specBadge').classList.toggle('hidden',!(mode==='play'&&!G.over));
+    $('foeLabel').textContent='🔴';
+    $('foeEvo').textContent=G.aiEra===2?'👑':('⬆️'+Math.min(100,Math.floor((G.aiXp||0)/EVOLVE_XP*100))+'%');
+    $('foeMoney').textContent='💰'+Math.floor(G.aiMoney||0);
+    const be0=$('btnEvolve');
+    be0.textContent=G.era===2?'👑':('⬆️'+Math.min(100,Math.floor(G.xp/EVOLVE_XP*100))+'%');
+    be0.classList.remove('ready');
+    $('emoteWrap').style.display=(mode==='play'&&!G.over)?'flex':'none';
+    $('btnEmote').style.display='';
+    $('btnSpeedReq').style.display='none';
+    renderQueue();
+    return;
+  }
   const lock=mode!=='play'||!!G.over||paused;
   for(const k of cmdrOf(0).roster[G.era]){
     const b=$('btn-'+k);
@@ -45,12 +64,9 @@ function refreshHUD(){
       if(ic)ic.textContent=G.incomeLvl>=INCOME_MAX_LVL?'MAX':'💰'+incomeCost(G.incomeLvl);
     }
   }
-  /* 天气标签：显示当前天气与剩余秒数 */
-  const wt=$('wTag');
-  if(G.weatherKey&&G.weatherKey!=='clear')wt.textContent=G.weather.icon+Math.max(0,Math.ceil(G.weatherT))+'s';
-  else if(wt.textContent)wt.textContent='';
-  $('emoteWrap').style.display=(G&&mode==='play'&&!G.over)?'flex':'none';
-  $('btnEmote').style.display=(G&&G.pvp)?'':'none';
+  $('emoteWrap').style.display=(mode==='play'&&!G.over)?'flex':'none';
+  $('btnEmote').style.display=G.pvp?'':'none';
+  $('btnSpeedReq').style.display='flex';
   for(const pt of cmdrOf(0).place){
     const b=$('btn-place-'+pt);
     if(!b)continue;
@@ -69,7 +85,7 @@ function refreshHUD(){
 
 /* ---------------- 购买 ---------------- */
 function buy(k){
-  if(!G||mode!=='play'||paused||G.over)return;
+  if(!G||mode!=='play'||paused||G.over||G.spectator)return;
   const c=UNITS[k].cost;
   if(G.money<c||G.queue.length>=QUEUE_MAX)return;
   if(G.pvp&&NET&&!NET.isHost){netSendBuy(k);sClick();return;}
@@ -78,7 +94,7 @@ function buy(k){
   sClick();
 }
 function buyIncome(){
-  if(!G||mode!=='play'||paused||G.over||G.incomeLvl>=INCOME_MAX_LVL)return;
+  if(!G||mode!=='play'||paused||G.over||G.spectator||G.incomeLvl>=INCOME_MAX_LVL)return;
   const c=incomeCost(G.incomeLvl);
   if(G.money<c)return;
   if(G.pvp&&NET&&!NET.isHost){netSendIncome();sClick();return;}
@@ -149,7 +165,7 @@ function buildUnitButtons(){
   lastIncomeLvlShown=-1;
 }
 function tryEvolve(){
-  if(!G||mode!=='play'||paused||G.over||G.era===2)return;
+  if(!G||mode!=='play'||paused||G.over||G.spectator||G.era===2)return;
   if(G.xp<EVOLVE_XP){toast('👑 经验不足，还差 '+Math.ceil(EVOLVE_XP-G.xp)+' 点（击杀敌军获取）');return;}
   if(G.money<EVOLVE_COST){toast('👑 进化还需 '+Math.ceil(EVOLVE_COST-G.money)+' 金币');return;}
   if(G.pvp&&NET&&!NET.isHost){netSendEvolve();toast('👑 进化指令已发送');sClick();return;}
@@ -530,6 +546,15 @@ buildCmdrPick('pvpCmdrPick');
 $('btnEmote').addEventListener('pointerdown',e=>{
   e.preventDefault();
   $('emoteBar').classList.toggle('hidden');
+});
+$('btnSpecFlip').addEventListener('pointerdown',e=>{e.preventDefault();specFlipView();});
+$('btnPvpWatch').addEventListener('pointerdown',e=>{
+  e.preventDefault();
+  if(!NET)return;
+  const link=netWatchLink();
+  if(navigator.clipboard&&navigator.clipboard.writeText)
+    navigator.clipboard.writeText(link).then(()=>toast('👁️ 已复制观战链接'),()=>prompt('观战链接：',link));
+  else prompt('观战链接：',link);
 });
 $('btnPvpCopy').addEventListener('pointerdown',e=>{
   e.preventDefault();

@@ -23,7 +23,7 @@
       <span id="volNum">100</span>
     </div>
   </div>
-  <div class="side"><span class="inc">敌军</span><div class="hpwrap red"><div class="hpfill" id="hpR"></div></div><span>🏯</span></div>
+  <div class="side"><span class="inc" id="foeLabel">敌军</span><span class="inc specOnly" id="foeEvo"></span><span class="specOnly" id="foeMoney"></span><div class="hpwrap red"><div class="hpfill" id="hpR"></div></div><span>🏯</span></div>
 </div>
 
 <div id="queuebar"></div>
@@ -33,9 +33,12 @@
   <button class="iconbtn" id="btnSpeedReq" title="游戏倍速">
     <span>⏩</span><span class="sv" id="spdVal">×1</span>
   </button>
+  <button class="iconbtn specOnly" id="btnSpecFlip" title="切换视角">🔄</button>
   <div id="emoteBar" class="hidden"></div>
   <button class="iconbtn" id="btnEmote" title="快速表情">😄</button>
 </div>
+<div id="specBadge" class="hidden">👁️ 观战中</div>
+<div id="specEmotes"></div>
 
 <div id="spdAsk" class="hidden">
   <span id="spdAskTxt"></span>
@@ -79,6 +82,7 @@
     <p id="pvpLink" style="word-break:break-all;font-size:12px"></p>
     <div class="diffs">
       <button class="obtn" id="btnPvpCopy">📋 复制邀请链接</button>
+      <button class="obtn" id="btnPvpWatch">👁️ 复制观战链接</button>
       <button class="obtn" id="btnPvpStart" style="display:none">⚔️ 开始对战</button>
       <button class="obtn" id="btnPvpCancel">↩️ 返回</button>
     </div>

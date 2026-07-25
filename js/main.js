@@ -40,6 +40,8 @@ function frame(ts){
 resize();
 newGame(null);
 mode='menu';
-const _pvpCode=new URLSearchParams(location.search).get('pvp');
-if(_pvpCode)netJoin(_pvpCode);
+const _q=new URLSearchParams(location.search);
+const _pvpCode=_q.get('pvp'), _watchCode=_q.get('watch');
+if(_watchCode)netWatch(_watchCode);
+else if(_pvpCode)netJoin(_pvpCode);
 requestAnimationFrame(ts=>{last=ts;requestAnimationFrame(frame);});

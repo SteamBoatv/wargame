@@ -22,7 +22,9 @@ function netCode(){
 function netSupported(){return location.protocol==='http:'||location.protocol==='https:';}
 function netFx(o){if(G&&G.pvp&&G.pvpHost&&NET)NET.sendFx(o);}
 
-async function netOpen(code,isHost){
+async function netOpen(code,role){
+  /* role: 'host' | 'guest' | 'spectator' —— 观众只收不发，且不占玩家位 */
+  const isHost=role==='host', spectator=role==='spectator';
   const lib=await netLib();
   const room=lib.joinRoom({appId:'kip-wargame-pvp-v1'},'wg-'+code);
   const [sendCmd,onCmd]=room.makeAction('c');
@@ -30,26 +32,78 @@ async function netOpen(code,isHost){
   const [sendFx,onFx]=room.makeAction('f');
   const [sendMeta,onMeta]=room.makeAction('m');
   const [sendEmote,onEmote]=room.makeAction('g');
-  NET={room,code,isHost,peer:null,sendCmd,sendSnap,sendFx,sendMeta,sendEmote,snapT:0};
-  onEmote(i=>{if(G&&G.pvp)showEmote(1,i|0);});
+  NET={room,code,role,isHost,spectator,peer:null,specs:{},specCount:0,
+       specMirror:false,lastStart:null,started:false,
+       sendCmd,sendSnap,sendFx,sendMeta,sendEmote,snapT:0,specSnapT:0};
+  /* Trystero 房间是全网状连接，广播天然到达所有人，无需主机中继 */
+  onEmote(i=>{
+    if(!G||!G.pvp)return;
+    const d=(i&&typeof i==='object')?i:{i:i|0};
+    if(d.spec){showSpecEmote(d.i|0);return;}
+    /* 玩家表情：观众按当前视角归位，玩家则一律显示在对面 */
+    const side=NET.spectator?(NET.specMirror?1-(d.side||0):(d.side||0)):1;
+    showEmote(side,d.i|0);
+  });
   room.onPeerJoin(id=>{
-    NET.peer=id;
+    /* 自报身份，让对方知道该把我当玩家还是观众 */
+    try{sendMeta({k:'iam',role},id);}catch(e){sendMeta({k:'iam',role});}
+    if(!spectator&&!isHost)NET.peer=NET.peer||id;
     netLobbyStatus();
-    if(NET.isHost)sendMeta({k:'hi'});
-    if(NET.myLocked)sendMeta({k:'cmdrLock',c:NET.myCmdr});
     sFlag();
   });
-  room.onPeerLeave(()=>{
+  room.onPeerLeave(id=>{
+    if(NET.specs[id]){
+      delete NET.specs[id];
+      NET.specCount=Math.max(0,NET.specCount-1);
+      netLobbyStatus();
+      return; /* 观众进出绝不能影响对局 */
+    }
+    if(id!==NET.peer&&NET.peer)return;
     NET.peer=null;
-    if(G&&G.pvp&&!G.over)netShowEnd(true,'对方已断线');
-    else netLobbyStatus();
+    if(G&&G.pvp&&!G.over){
+      if(NET.spectator)netSpecEnd('对局已结束（房主离线）');
+      else netShowEnd(true,'对方已断线');
+    }else netLobbyStatus();
   });
-  onCmd(c=>{if(NET&&NET.isHost&&G&&G.pvp&&!G.over)netApplyCmd(c);});
+  /* 观众发来的任何指令一律丢弃 */
+  onCmd((c,fromId)=>{
+    if(!NET||!NET.isHost||!G||!G.pvp||G.over)return;
+    if(NET.specs[fromId]||fromId!==NET.peer)return;
+    netApplyCmd(c);
+  });
   onSnap(sn=>{if(NET&&!NET.isHost)netApplySnap(sn);});
   onFx(f=>{if(NET&&!NET.isHost)netApplyFx(f);});
-  onMeta(mt=>{
+  onMeta((mt,fromId)=>{
     if(!NET)return;
-    if(mt.k==='hi'){NET.peer=NET.peer||'host';netLobbyStatus();}
+    if(mt.k==='iam'){
+      if(mt.role==='spectator'){
+        if(!NET.specs[fromId]){NET.specs[fromId]=1;NET.specCount++;}
+        /* 中途进来的观众缺开局信息，主机定向补发一份 */
+        if(NET.isHost&&NET.started&&NET.lastStart)
+          try{sendMeta(Object.assign({k:'start'},NET.lastStart),fromId);}catch(e){}
+        netLobbyStatus();
+      }else if(!NET.spectator){
+        if(NET.isHost&&NET.peer&&NET.peer!==fromId){
+          try{sendMeta({k:'full'},fromId);}catch(e){}
+          return;
+        }
+        NET.peer=fromId;
+        if(NET.isHost)sendMeta({k:'hi'},fromId);
+        if(NET.myLocked)sendMeta({k:'cmdrLock',c:NET.myCmdr});
+        netLobbyStatus();
+      }
+      return;
+    }
+    if(mt.k==='full'&&!NET.spectator&&!NET.isHost){
+      $('pvpStatus').textContent='⚠️ 房间里已经有两名玩家了 —— 可改用观战链接围观';
+      return;
+    }
+    if(NET.spectator){
+      if(mt.k==='start')netStartSpectator(mt);
+      else if(mt.k==='end')netSpecEnd(mt.winner===0?'🔵 蓝方获胜':'🔴 红方获胜');
+      return;
+    }
+    if(mt.k==='hi'){NET.peer=NET.peer||fromId||'host';netLobbyStatus();}
     else if(mt.k==='cmdrLock'){NET.peerCmdr=mt.c;NET.peerLocked=true;netLobbyStatus();netMaybeReveal();sFlag();}
     else if(mt.k==='start'&&!NET.isHost)netStartGuest(mt);
     else if(mt.k==='end'&&!NET.isHost)netShowEnd(mt.winner===1,null);
@@ -61,7 +115,7 @@ async function netCreate(){
   if(!netSupported()){toast('⚠️ 联机需要通过网页链接访问（file:// 本地模式不可用）');return;}
   showPvpLobby();
   $('pvpStatus').textContent='正在创建房间…';
-  try{await netOpen(netCode(),true);}
+  try{await netOpen(netCode(),'host');}
   catch(e){$('pvpStatus').textContent='创建失败：'+(e&&e.message||e);return;}
   netLobbyStatus();
 }
@@ -69,8 +123,17 @@ async function netJoin(code){
   if(!netSupported()){toast('⚠️ 联机需要通过网页链接访问');return;}
   showPvpLobby();
   $('pvpStatus').textContent='正在加入房间 '+code+' …';
-  try{await netOpen(code,false);}
+  try{await netOpen(code,'guest');}
   catch(e){$('pvpStatus').textContent='加入失败：'+(e&&e.message||e);return;}
+  netLobbyStatus();
+}
+async function netWatch(code){
+  if(!netSupported()){toast('⚠️ 观战需要通过网页链接访问');return;}
+  showPvpLobby();
+  $('pvpPickSec').style.display='none';
+  $('pvpStatus').textContent='👁️ 正在连接房间 '+code+' …（等待对局开始）';
+  try{await netOpen(code,'spectator');}
+  catch(e){$('pvpStatus').textContent='连接失败：'+(e&&e.message||e);return;}
   netLobbyStatus();
 }
 function showPvpLobby(){
@@ -80,6 +143,9 @@ function showPvpLobby(){
 }
 function netLink(){
   return location.origin+location.pathname+'?pvp='+NET.code;
+}
+function netWatchLink(){
+  return location.origin+location.pathname+'?watch='+NET.code;
 }
 /* 大厅流程：连接 → 双方选人并确认 → 房主开战 */
 function netLockCmdr(){
@@ -104,8 +170,20 @@ function netMaybeReveal(){
 }
 function netLobbyStatus(){
   if(!NET)return;
+  const specTxt=NET.specCount?('　👁️ 观众 '+NET.specCount+' 人'):'';
+  if(NET.spectator){
+    $('pvpLink').textContent='房间号：'+NET.code;
+    $('btnPvpCopy').style.display='none';
+    $('btnPvpWatch').style.display='none';
+    $('pvpPickSec').style.display='none';
+    $('btnPvpStart').style.display='none';
+    $('pvpFoeCmdr').textContent='';
+    $('pvpStatus').textContent=NET.started?'👁️ 观战中…':'👁️ 已连接，等待房主开战…';
+    return;
+  }
   $('pvpLink').textContent=NET.isHost?netLink():('房间号：'+NET.code);
   $('btnPvpCopy').style.display=NET.isHost?'':'none';
+  $('btnPvpWatch').style.display=NET.isHost?'':'none';
   $('pvpPickSec').style.display=NET.peer?'flex':'none';
   const bothLocked=NET.myLocked&&NET.peerLocked;
   let foeTxt='';
@@ -121,23 +199,25 @@ function netLobbyStatus(){
   buildCmdrPick('pvpCmdrPick');
   const both=NET.myLocked&&NET.peerLocked;
   if(!NET.peer){
-    $('pvpStatus').textContent=NET.isHost?'⌛ 等待好友通过链接加入…':'⌛ 正在连接房主…（P2P 打洞最多需十几秒）';
+    $('pvpStatus').textContent=(NET.isHost?'⌛ 等待好友通过链接加入…':'⌛ 正在连接房主…（P2P 打洞最多需十几秒）')+specTxt;
     $('btnPvpStart').style.display='none';
   }else if(!NET.myLocked){
-    $('pvpStatus').textContent='🎖️ 双方已连接，请选择你的指挥官并确认';
+    $('pvpStatus').textContent='🎖️ 双方已连接，请选择你的指挥官并确认'+specTxt;
     $('btnPvpStart').style.display='none';
   }else if(!both){
-    $('pvpStatus').textContent='✅ 已确认，等待对方选择指挥官…';
+    $('pvpStatus').textContent='✅ 已确认，等待对方选择指挥官…'+specTxt;
     $('btnPvpStart').style.display='none';
   }else{
-    $('pvpStatus').textContent=NET.isHost?'⚔️ 双方就绪，可以开战！':'⚔️ 双方就绪，等待房主开始…';
+    $('pvpStatus').textContent=(NET.isHost?'⚔️ 双方就绪，可以开战！':'⚔️ 双方就绪，等待房主开始…')+specTxt;
     $('btnPvpStart').style.display=NET.isHost?'':'none';
   }
 }
 function netLeave(){
   if(NET){try{NET.room.leave();}catch(e){}}
   NET=null;
-  if(G)G.pvp=false;
+  if(G){G.pvp=false;G.spectator=false;}
+  document.body.classList.remove('spectating');
+  $('specBadge').classList.add('hidden');
   $('btnAgain').style.display='';
   $('pvpov').classList.add('hidden');
 }
@@ -150,12 +230,58 @@ function netStartMatch(){
   const events=[];
   if(Math.random()<0.7)events.push({at:45+Math.random()*60,type:['gold','meteor','bounty'][(Math.random()*3)|0],done:false});
   const c0=NET.myCmdr||'marshal', c1=NET.peerCmdr||'marshal';
+  NET.lastStart={def,events,c0,c1};
+  NET.started=true;
   NET.sendMeta({k:'start',def,events,c0,c1});
   netStartCommon(def,events,true,c0,c1);
 }
 function netStartGuest(mt){
   /* 客机镜像：自己是本地 side0，所以自己的指挥官是 mt.c1 */
   netStartCommon(mt.def,mt.events||[],false,mt.c1||'marshal',mt.c0||'marshal');
+}
+/* 观众：不镜像，直接用房主坐标系；蓝方=房主(side0)、红方=客人(side1) */
+function netStartSpectator(mt){
+  RUN=null;
+  NET.started=true;
+  const stage={
+    node:{t:'pvp'},per:PVP_PER,
+    cmdr0:mt.c0||'marshal',cmdr1:mt.c1||'marshal',
+    events:[],mapDef:NET.specMirror?mirrorDef(mt.def):mt.def,
+    aiIncomeMul:1,hpMul:1,dmgMul:1,gobColor:'red',
+  };
+  NET.specDef=mt.def;
+  newGame(stage);
+  G.pvp=true; G.pvpHost=false; G.spectator=true; G.pvpSpeed=1;
+  G._umap={};G._pmap={};G.uidSeq=0;G.pidSeq=0;
+  mode='play';
+  ['pvpov','menu','mapov','gameover','runover'].forEach(id=>$(id).classList.add('hidden'));
+  document.body.classList.add('spectating');
+  toast('👁️ 观战开始：'+COMMANDERS[stage.cmdr0].icon+'蓝方 vs '+COMMANDERS[stage.cmdr1].icon+'红方');
+  $('wTag').textContent='';
+  keepAwake();
+  startMusic();
+}
+/* 观众切换视角：清空插值缓存，让下一帧快照按新朝向重建 */
+function specFlipView(){
+  if(!NET||!NET.spectator||!NET.specDef)return;
+  NET.specMirror=!NET.specMirror;
+  buildWorld(NET.specMirror?mirrorDef(NET.specDef):NET.specDef);
+  G.flags=CUR_DEF.flags.map(fs=>({s:fs*L,owner:-1,prog:0}));
+  G.units=[];G.projs=[];G.turrets=[];G.piles=[];G.booms=[];
+  G._umap={};G._pmap={};
+  const c0=G.cmdr0,c1=G.cmdr1;
+  G.cmdr0=c1;G.cmdr1=c0;
+  cam.x=BASE0.x;cam.y=BASE0.y-120;clampCam();
+  buildUnitButtons();
+  toast('🔄 已切换到'+(NET.specMirror?'红方':'蓝方')+'视角');
+  sClick();
+}
+function netSpecEnd(txt){
+  if(G)G.over=1;
+  $('goTitle').textContent='👁️ '+(txt||'对局结束');
+  $('btnAgain').style.display='none';
+  $('gameover').classList.remove('hidden');
+  sWin();
 }
 function mirrorDef(def){
   return {
@@ -229,11 +355,19 @@ function netApplyCmd(c){
 /* ---- 主机快照 ---- */
 function netHostSnap(dt){
   NET.snapT-=dt;
+  NET.specSnapT-=dt;
   if(NET.snapT>0)return;
   NET.snapT=0.1;
+  /* 观众多了会吃掉房主上行带宽，3 人及以上时观众降到 5Hz（插值渲染够用） */
+  const specIds=Object.keys(NET.specs);
+  let targets=null;
+  if(specIds.length){
+    if(specIds.length>=3&&NET.specSnapT>0)targets=NET.peer?[NET.peer]:[];
+    else NET.specSnapT=0.2;
+  }
   for(const p of G.projs)if(!p.pid)p.pid=++G.pidSeq;
   try{
-    NET.sendSnap({
+    const snap={
       t:Math.round(G.t*10)/10,
       sp:Math.round((G.pvpSpeed||1)*100)/100,
       wk:Math.max(0,WEATHER_KEYS.indexOf(G.weatherKey||'clear')),
@@ -241,6 +375,7 @@ function netHostSnap(dt){
       m0:G.money|0,m1:G.aiMoney|0,
       i0:G.income,i1:G.aiIncome,
       e0:G.era,e1:G.aiEra,
+      x0:G.xp|0,il0:G.incomeLvl,       /* 观众上帝视角需要双方经济 */
       x1:G.aiXp|0,il1:G.aiIncomeLvl,
       bh:[Math.round(G.baseHp[0]),Math.round(G.baseHp[1])],
       bt:Math.round(G.bountyT*10)/10,
@@ -255,7 +390,10 @@ function netHostSnap(dt){
       pi:G.piles.map(p=>[Math.round(p.s),p.amt]),
       bm:G.booms.map(b=>[Math.round(b.x),Math.round(b.y),Math.round(b.t*100)]),
       q1:G.aiQueue.map(i=>[TYPE_KEYS.indexOf(i.type),Math.round(i.t*10)]),
-    });
+      q0:G.queue.map(i=>[TYPE_KEYS.indexOf(i.type),Math.round(i.t*10)]),
+    };
+    if(targets)NET.sendSnap(snap,targets);
+    else NET.sendSnap(snap);
   }catch(e){}
 }
 
@@ -270,24 +408,34 @@ function netApplySnap(sn){
     if(wkey!==G.weatherKey)setWeather(wkey,sn.wt,true);
     G.weatherT=sn.wt;
   }
-  G.money=sn.m1;G.income=sn.i1;
-  if(G.era!==sn.e1){G.era=sn.e1;buildUnitButtons();} /* 时代变更必须重建兵种栏（修复客机进化后无法出兵） */
-  G.xp=sn.x1;G.incomeLvl=sn.il1;
-  G.aiMoney=sn.m0;G.aiEra=sn.e0;
-  G.baseHp=[sn.bh[1],sn.bh[0]];
+  /* mir=1：客机镜像（自己永远在下方）。mir=0：观众直看房主坐标系。
+     观众按 specMirror 决定要不要翻转，两种模式共用同一段代码。 */
+  const mir=(NET&&NET.spectator)?(NET.specMirror?1:0):1;
+  const MS=v=>mir?L-v:v, MX=v=>mir?WORLD_W-v:v, MY=v=>mir?WORLD_H-v:v;
+  const MSIDE=v=>mir?1-v:v, MOFF=v=>mir?-v:v, MANG=v=>mir?v+Math.PI:v;
+  const myM=mir?sn.m1:sn.m0, myI=mir?sn.i1:sn.i0, myE=mir?sn.e1:sn.e0;
+  const myX=mir?sn.x1:sn.x0, myIL=mir?sn.il1:sn.il0;
+  G.money=myM;G.income=myI;
+  if(G.era!==myE){G.era=myE;buildUnitButtons();} /* 时代变更必须重建兵种栏（修复客机进化后无法出兵） */
+  G.xp=myX;G.incomeLvl=(myIL===undefined?G.incomeLvl:myIL);
+  G.aiMoney=mir?sn.m0:sn.m1;
+  G.aiEra=mir?sn.e0:sn.e1;
+  G.aiIncome=mir?sn.i0:sn.i1;
+  G.aiXp=(mir?sn.x0:sn.x1)||0;
+  G.baseHp=mir?[sn.bh[1],sn.bh[0]]:[sn.bh[0],sn.bh[1]];
   G.bountyT=sn.bt;
-  if(sn.pc)for(const k in sn.pc)if(G.pcds[k])G.pcds[k]=[sn.pc[k][1],sn.pc[k][0]];
+  if(sn.pc)for(const k in sn.pc)if(G.pcds[k])G.pcds[k]=mir?[sn.pc[k][1],sn.pc[k][0]]:[sn.pc[k][0],sn.pc[k][1]];
   G.flags.forEach((f,i)=>{
-    const a=sn.fl[i];
+    const a=sn.fl[mir?i:(sn.fl.length-1-i)];
     if(!a)return;
-    f.owner=a[0]===-1?-1:1-a[0];
-    f.prog=-a[1]/100;
+    f.owner=a[0]===-1?-1:MSIDE(a[0]);
+    f.prog=mir?-a[1]/100:a[1]/100;
   });
   const seen={};
   for(const a of sn.us){
     const uid=a[0];
     seen[uid]=1;
-    const side=1-a[2], s=L-a[3], off=-a[4], hp=a[5], max=a[6], fl=a[7];
+    const side=MSIDE(a[2]), s=MS(a[3]), off=MOFF(a[4]), hp=a[5], max=a[6], fl=a[7];
     let u=G._umap[uid];
     if(!u){
       u={uid,side,type:TYPE_KEYS[a[1]],s,off,hp,max,cd:9,walk:rand(0,6),lunge:0,
@@ -312,10 +460,10 @@ function netApplySnap(sn){
   const pseen={}, newPr=[];
   for(const a of sn.pr){
     pseen[a[0]]=1;
-    const x=WORLD_W-a[2], y=WORLD_H-a[3], ang=a[4]/100+Math.PI;
+    const x=MX(a[2]), y=MY(a[3]), ang=MANG(a[4]/100);
     let p=G._pmap[a[0]];
     const kind=PROJ_KINDS[a[1]]||'shell';
-    const mside=1-(a[5]||0); /* 镜像：主机 side -> 客机本地 side */
+    const mside=MSIDE(a[5]||0);
     if(!p){
       p={pid:a[0],kind,x,y,_tx:x,_ty:y,ang,side:mside,dead:false};
       G._pmap[a[0]]=p;
@@ -324,14 +472,17 @@ function netApplySnap(sn){
   }
   for(const pid in G._pmap)if(!pseen[pid])delete G._pmap[pid];
   G.projs=newPr;
-  G.turrets=sn.tr.map(a=>({side:1-a[0],x:WORLD_W-a[1],y:WORLD_H-a[2],
-    ang:a[3]/100+Math.PI,life:a[4]/10,flash:a[5]/100,cd:9}));
-  G.piles=sn.pi.map(a=>({s:L-a[0],amt:a[1]}));
-  const nb=sn.bm.map(a=>({x:WORLD_W-a[0],y:WORLD_H-a[1],t:a[2]/100}));
+  G.turrets=sn.tr.map(a=>({side:MSIDE(a[0]),x:MX(a[1]),y:MY(a[2]),
+    ang:MANG(a[3]/100),life:a[4]/10,flash:a[5]/100,cd:9}));
+  G.piles=sn.pi.map(a=>({s:MS(a[0]),amt:a[1]}));
+  const nb=sn.bm.map(a=>({x:MX(a[0]),y:MY(a[1]),t:a[2]/100}));
   if(nb.some(b=>b.t<0.12)&&!G._boomHint){sBoom();G._boomHint=true;}
   if(!nb.length)G._boomHint=false;
   G.booms=nb;
-  G.queue=sn.q1.map(a=>({type:TYPE_KEYS[a[0]],t:a[1]/10}));
+  const myQ=mir?sn.q1:(sn.q0||sn.q1);
+  G.queue=(myQ||[]).map(a=>({type:TYPE_KEYS[a[0]],t:a[1]/10}));
+  const foeQ=mir?sn.q0:sn.q1;
+  G.aiQueue=(foeQ||[]).map(a=>({type:TYPE_KEYS[a[0]],t:a[1]/10}));
 }
 
 /* ---- 客机每帧（不模拟战斗，只插值+动画） ---- */
@@ -360,11 +511,20 @@ function netGuestTick(dt){
 /* ---- 特效中继 ---- */
 function netApplyFx(f){
   if(!G||!G.pvp)return;
+  const spec=NET&&NET.spectator;
+  /* 观众不属于任何一方，措辞改成蓝方/红方（side 按当前视角归位） */
+  const who=s=>{
+    const v=NET.specMirror?1-s:s;
+    return v===0?'🔵 蓝方':'🔴 红方';
+  };
   if(f.k==='tn')toast(f.x);
-  else if(f.k==='ts')toast((f.side===1?'💰 我方':'⚠️ 对方')+f.x);
-  else if(f.k==='fc'){toast(f.side===1?'🚩 我方占领哨站！':'⚠️ 对方占领了哨站');sFlag();}
-  else if(f.k==='ev'){toast('👑 我方进化完成！');G.flash=1;sEvolve();}
-  else if(f.k==='evh'){toast('⚠️ 对方进化到了王国时代！');G.flash=1;sEvolve();}
+  else if(f.k==='ts')toast(spec?(who(f.side)+f.x):((f.side===1?'💰 我方':'⚠️ 对方')+f.x));
+  else if(f.k==='fc'){
+    toast(spec?(who(f.side)+'占领哨站！'):(f.side===1?'🚩 我方占领哨站！':'⚠️ 对方占领了哨站'));
+    sFlag();
+  }
+  else if(f.k==='ev'){toast(spec?(who(1)+'进化完成！'):'👑 我方进化完成！');G.flash=1;sEvolve();}
+  else if(f.k==='evh'){toast(spec?(who(0)+'进化完成！'):'⚠️ 对方进化到了王国时代！');G.flash=1;sEvolve();}
   else if(f.k==='bn')showBanner(f.x);
   else if(f.k==='wx'){
     const w=WEATHERS[f.key]||WEATHERS.clear;
@@ -382,7 +542,7 @@ function updateSpeedBtn(){
   else el.textContent='×'+gameSpeed;
 }
 function speedBtnTap(){
-  if(!G||mode!=='play'||G.over)return;
+  if(!G||mode!=='play'||G.over||G.spectator)return;
   if(!G.pvp){
     gameSpeed=gameSpeed>=3?1:gameSpeed+1;
     updateSpeedBtn();
@@ -452,9 +612,24 @@ function sendEmoteIdx(i){
   const n=performance.now();
   if(n-lastEmoteT<1500)return;
   lastEmoteT=n;
-  if(NET&&NET.sendEmote){try{NET.sendEmote(i);}catch(e){}}
-  showEmote(0,i);
+  const spec=!!(NET&&NET.spectator);
+  if(NET&&NET.sendEmote){
+    try{NET.sendEmote({i,spec,side:(NET.isHost?0:1)});}catch(e){}
+  }
+  if(spec)showSpecEmote(i);
+  else showEmote(0,i);
   $('emoteBar').classList.add('hidden');
+}
+/* 观众表情：屏幕边缘的横向气泡流，与玩家表情明确区分 */
+function showSpecEmote(i){
+  const wrap=$('specEmotes');
+  if(!wrap)return;
+  const d=document.createElement('div');
+  d.className='specbub';
+  d.textContent='👁️'+(EMOTES[i]||'😄');
+  wrap.appendChild(d);
+  while(wrap.children.length>5)wrap.removeChild(wrap.firstChild);
+  setTimeout(()=>d.remove(),3400);
 }
 function showEmote(side,i){
   if(!G)return;

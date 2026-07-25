@@ -545,7 +545,7 @@ function updatePiles(dt){
 /* ---------------- 放置系统（重炮 + 工程师建筑：拒马/箭塔/工坊） ---------------- */
 let placing=false, placePos=null, placingType='turret';
 function togglePlace(ty){
-  if(!G||mode!=='play'||paused||G.over)return;
+  if(!G||mode!=='play'||paused||G.over||G.spectator)return;
   ty=ty||'turret';
   if(placing&&placingType===ty){placing=false;placePos=null;toast('已取消部署');return;}
   const P=PLACEABLES[ty];
