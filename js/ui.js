@@ -165,15 +165,40 @@ $('btnSpeedReq').addEventListener('pointerdown',e=>{
 });
 $('btnSpdOk').addEventListener('pointerdown',e=>{e.preventDefault();answerSpd(true);});
 $('btnSpdNo').addEventListener('pointerdown',e=>{e.preventDefault();answerSpd(false);});
-const VOL_STEPS=[[1,'🔊100'],[0.66,'🔉66'],[0.33,'🔈33']];
-let volIdx=0;
-$('btnVol').addEventListener('pointerdown',e=>{
-  e.preventDefault();
-  volIdx=(volIdx+1)%VOL_STEPS.length;
-  setVolume(VOL_STEPS[volIdx][0]);
-  $('btnVol').textContent=VOL_STEPS[volIdx][1];
-  sClick();
-});
+/* 音量：可拖动滑块（0-100），记忆到 localStorage */
+function volIconFor(p){return p<=0?'🔇':(p<34?'🔈':(p<70?'🔉':'🔊'));}
+function applyVolUI(p,quiet){
+  p=clamp(Math.round(p),0,100);
+  setVolume(p/100);
+  $('btnVol').textContent=volIconFor(p)+p;
+  $('volIcon').textContent=volIconFor(p);
+  $('volNum').textContent=p;
+  if($('volRange').value!=String(p))$('volRange').value=p;
+  try{localStorage.setItem('wg_vol',p);}catch(e){}
+  if(!quiet)sClick();
+}
+(function initVolume(){
+  let saved=100;
+  try{const v=localStorage.getItem('wg_vol');if(v!==null)saved=clamp(parseInt(v,10)||0,0,100);}catch(e){}
+  applyVolUI(saved,true);
+  const rng=$('volRange'), panel=$('volPanel');
+  /* 滑块要吃自己的指针事件，别冒泡到画布去拖镜头 */
+  ['pointerdown','pointermove','pointerup','touchstart','touchmove','wheel'].forEach(ev=>
+    panel.addEventListener(ev,e=>e.stopPropagation()));
+  rng.addEventListener('input',()=>applyVolUI(+rng.value,true));
+  rng.addEventListener('change',()=>applyVolUI(+rng.value));
+  $('btnVol').addEventListener('pointerdown',e=>{
+    e.preventDefault();
+    panel.classList.toggle('hidden');
+    sClick();
+  });
+  /* 点面板外关闭 */
+  document.addEventListener('pointerdown',e=>{
+    if(panel.classList.contains('hidden'))return;
+    if(panel.contains(e.target)||e.target===$('btnVol'))return;
+    panel.classList.add('hidden');
+  },true);
+})();
 $('btnMute').addEventListener('pointerdown',e=>{
   e.preventDefault();
   muted=!muted;

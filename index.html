@@ -15,8 +15,13 @@
     <button class="iconbtn" id="btnEvolve" title="攒经验进化时代">⬆️0%</button>
     <button class="iconbtn on" id="btnFollow" title="自动跟随战线">🎯</button>
     <button class="iconbtn" id="btnPause" title="暂停">⏸️</button>
-    <button class="iconbtn" id="btnVol" title="音量大小">🔊100</button>
+    <button class="iconbtn" id="btnVol" title="音量大小（点击后拖动调节）">🔊100</button>
     <button class="iconbtn" id="btnMute" title="静音开关">🔊</button>
+    <div id="volPanel" class="hidden">
+      <span id="volIcon">🔊</span>
+      <input id="volRange" type="range" min="0" max="100" step="1" value="100" aria-label="音量">
+      <span id="volNum">100</span>
+    </div>
   </div>
   <div class="side"><span class="inc">敌军</span><div class="hpwrap red"><div class="hpfill" id="hpR"></div></div><span>🏯</span></div>
 </div>
