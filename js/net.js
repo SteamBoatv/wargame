@@ -48,7 +48,7 @@ async function netOpen(code,isHost){
   onMeta(mt=>{
     if(!NET)return;
     if(mt.k==='hi'){NET.peer=NET.peer||'host';netLobbyStatus();}
-    else if(mt.k==='cmdrLock'){NET.peerCmdr=mt.c;NET.peerLocked=true;netLobbyStatus();sFlag();}
+    else if(mt.k==='cmdrLock'){NET.peerCmdr=mt.c;NET.peerLocked=true;netLobbyStatus();netMaybeReveal();sFlag();}
     else if(mt.k==='start'&&!NET.isHost)netStartGuest(mt);
     else if(mt.k==='end'&&!NET.isHost)netShowEnd(mt.winner===1,null);
     else if(mt.k==='spdReq')showSpdAsk(mt.to);
@@ -87,15 +87,34 @@ function netLockCmdr(){
   NET.myLocked=true;
   NET.sendMeta({k:'cmdrLock',c:selCmdr});
   netLobbyStatus();
+  netMaybeReveal();
   sClick();
+}
+/* 暗牌：双方都锁定后才互相揭晓 */
+function netMaybeReveal(){
+  if(NET&&NET.myLocked&&NET.peerLocked&&!NET.revealed){
+    NET.revealed=true;
+    const foe=COMMANDERS[NET.peerCmdr||'marshal'];
+    toast('🎭 指挥官揭晓！对方是 '+foe.icon+' '+foe.name);
+    netLobbyStatus();
+    sEvolve();
+  }
 }
 function netLobbyStatus(){
   if(!NET)return;
   $('pvpLink').textContent=NET.isHost?netLink():('房间号：'+NET.code);
   $('btnPvpCopy').style.display=NET.isHost?'':'none';
   $('pvpPickSec').style.display=NET.peer?'flex':'none';
-  const foe=NET.peerLocked?COMMANDERS[NET.peerCmdr]:null;
-  $('pvpFoeCmdr').textContent=NET.peer?(foe?('✅ 对方已确认：'+foe.icon+' '+foe.name):'⌛ 对方选择指挥官中…'):'';
+  const bothLocked=NET.myLocked&&NET.peerLocked;
+  let foeTxt='';
+  if(NET.peer){
+    if(bothLocked){
+      const foe=COMMANDERS[NET.peerCmdr||'marshal'];
+      foeTxt='🎭 对方指挥官：'+foe.icon+' '+foe.name;
+    }else if(NET.peerLocked)foeTxt='🎭 对方已确认（选择保密，等你确认后揭晓）';
+    else foeTxt='⌛ 对方选择指挥官中…';
+  }
+  $('pvpFoeCmdr').textContent=foeTxt;
   $('btnCmdrLock').style.display=NET.myLocked?'none':'';
   buildCmdrPick('pvpCmdrPick');
   const both=NET.myLocked&&NET.peerLocked;
@@ -203,7 +222,8 @@ function netApplyCmd(c){
     if(c.t==='turret'){turretPlaceCore(1,c.x,c.y,false);return;}
     const pr=nearestPath(c.x,c.y);
     if(!pr||pr.d>76*pr.wf||pr.sep>5)return;
-    buildingPlaceCore(1,c.t,pr.s,false);
+    if(PLACEABLES[c.t].drop)airdropCore(1,pr.s);
+    else buildingPlaceCore(1,c.t,pr.s,false);
   }
 }
 

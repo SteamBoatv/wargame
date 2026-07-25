@@ -45,10 +45,10 @@ const CLS_NAME={inf:'步兵',spear:'枪兵',ranged:'远程',tank:'重甲',heal:'
 const COMMANDERS={
   marshal:{
     icon:'⚖️',name:'王国元帅',
-    desc:'均衡之道：五兵种克制环 · 挖矿经济 · 限时重炮',
+    desc:'均衡之道：五兵种克制环 · 挖矿经济 · 空降守备队',
     income:8,killMult:0.35,mining:true,
     roster:{1:['sword','spear','archer','shield','monk'],2:['sword2','spear2','archer2','shield2','monk2']},
-    place:['turret'],
+    place:['airdrop'],
   },
   engineer:{
     icon:'🏗️',name:'攻城工程师',
@@ -65,6 +65,7 @@ function cmdrOf(side){
 /* 可放置物（turret=限时重炮，其余为建筑实体） */
 const PLACEABLES={
   turret:{icon:null,emoji:'🛢',name:'重炮',cost:250,cd:45,road:false},
+  airdrop:{emoji:'🪂',name:'空降',cost:250,cd:50,road:true,drop:true,life:25},
   barricade:{emoji:'🚧',name:'拒马',cost:120,cd:20,road:true,maxAlive:2,unit:'b_barricade'},
   tower:{emoji:'🗼',name:'箭塔',cost:220,cd:35,road:true,maxAlive:2,unit:'b_tower'},
   workshop:{emoji:'🏭',name:'工坊',cost:200,cd:25,road:true,maxAlive:3,unit:'b_workshop'},

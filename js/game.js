@@ -22,7 +22,7 @@ function newGame(stage){
      baseHp:[BASE_HP,BASE_HP],
      units:[],projs:[],floats:[],queue:[],aiQueue:[],shake:0,spawnCnt:[0,0],
      flags:CUR_DEF.flags.map(fs=>({s:fs*L,owner:-1,prog:0})),
-     turrets:[],pcds:{turret:[0,0],barricade:[0,0],tower:[0,0],workshop:[0,0]},booms:[],
+     turrets:[],pcds:{turret:[0,0],airdrop:[0,0],barricade:[0,0],tower:[0,0],workshop:[0,0]},booms:[],
      streakN:0,streakT:-9,lastWarn:-9,banner:null,flash:0};
   if(RUN)RUN.goldCarry=0;
   placing=false; placePos=null;
@@ -197,6 +197,15 @@ function updateUnits(dt){
   const wSpd=G.weather.speedMul||1;
   for(const u of us){
     if(u.dying){u.dying+=dt;continue;}
+    if(u.expireT!==undefined){
+      u.expireT-=dt;
+      if(u.expireT<=0){
+        u.dying=1e-4; /* 空降部队到期消散：无击杀奖励 */
+        const ep=unitPos(u);
+        addFloat(ep.x,ep.y-40,'⌛','#cfe0ff',15);
+        continue;
+      }
+    }
     const st=UNITS[u.type], dir=u.side?-1:1;
     u.cd-=dt;
     u.atkT+=dt;
@@ -270,14 +279,16 @@ function updateUnits(dt){
     if(td<=rngEff){
       if(u.cd<=0){u.cd=st.cd;u.lunge=1;u.atkT=0;fire(u,st,tgt,onBase);}
     }else{
-      let blocked=false;
-      for(const a of us){
-        if(a===u||a.side!==u.side||a.dying||UNITS[a.type].cls==='bldg')continue;
-        if(Math.abs(a._lat-u._lat)>=18)continue;
-        const gp=(a.s-u.s)*dir;
-        if(gp>0&&gp<20){blocked=true;break;}
+      if(!u.hold){
+        let blocked=false;
+        for(const a of us){
+          if(a===u||a.side!==u.side||a.dying||UNITS[a.type].cls==='bldg')continue;
+          if(Math.abs(a._lat-u._lat)>=18)continue;
+          const gp=(a.s-u.s)*dir;
+          if(gp>0&&gp<20){blocked=true;break;}
+        }
+        if(!blocked){u.s+=st.speed*wSpd*(u.side?1:(RUN?RUN.mods.speed:1))*dir*dt;u.walk+=dt*st.speed*0.16;u.animT+=dt;u.moving=true;}
       }
-      if(!blocked){u.s+=st.speed*wSpd*(u.side?1:(RUN?RUN.mods.speed:1))*dir*dt;u.walk+=dt*st.speed*0.16;u.animT+=dt;u.moving=true;}
     }
   }
   for(let i=us.length-1;i>=0;i--)if(us[i].dying>0.45)us.splice(i,1);
@@ -535,12 +546,38 @@ function buildingPlaceCore(side,ty,s,localToast){
   if(side===0&&s>L-260){if(localToast)toast('⚠️ 离敌方城堡太近');return;}
   if(side===1&&s<260)return;
   if(side)G.aiMoney-=P.cost; else G.money-=P.cost;
-  G.pcds[ty][side]=P.cd;
+  G.pcds[ty][side]=P.cd*(side?1:(RUN?RUN.mods.turCd:1));
   G.units.push({uid:(G.uidSeq=(G.uidSeq||0)+1),side,type:ut,s,off:0,
     hp:st.hp,max:st.hp,cd:rand(0.3,0.8),walk:0,lunge:0,dying:0,moving:false,
     kills:0,star:false,atkT:9,animT:0});
   if(localToast)toast('🔨 '+P.name+'建造完成'+(ty==='workshop'?'（此位置产量 +'+Math.round(wsYield({side,s}))+'/秒）':''));
   sBoom();
+}
+/* 空降守备队：一支不推进的临时部队，随时代变强，限时后消失 */
+function airdropCore(side,s){
+  const P=PLACEABLES.airdrop;
+  const money=side?G.aiMoney:G.money;
+  if(money<P.cost||G.pcds.airdrop[side]>0)return;
+  if(side===0&&s>L-260)return;
+  if(side===1&&s<260)return;
+  if(side)G.aiMoney-=P.cost; else G.money-=P.cost;
+  G.pcds.airdrop[side]=P.cd*(side?1:(RUN?RUN.mods.turCd:1));
+  const era=side?G.aiEra:G.era;
+  const comp=era===2?['sword2','sword2','archer2']:['sword','sword','archer'];
+  comp.forEach((k,i)=>{
+    const st=UNITS[k];
+    const hpMul=(side?(G.stage?G.stage.hpMul:1):(RUN?RUN.mods.hp:1)*famMod(k,'hp'))*1.15;
+    const hp=Math.round(st.hp*hpMul);
+    G.units.push({uid:(G.uidSeq=(G.uidSeq||0)+1),side,type:k,
+      s:clamp(s+(i-1)*26*(side?1:-1),20,L-20),
+      off:LANE_SLOTS[i%LANE_SLOTS.length]+rand(-4,4),
+      hp,max:hp,cd:rand(0.1,0.3),walk:rand(0,6),lunge:0,dying:0,moving:false,
+      kills:0,star:false,atkT:9,animT:rand(0,9),hold:true,expireT:P.life});
+  });
+  const p=pathPos(s);
+  addFloat(p.x,p.y-50,'🪂 空降!','#ffd76a',20);
+  G.booms.push({x:p.x,y:p.y,t:0});
+  sSpawn();
 }
 function placeAt(wx,wy){
   placing=false;
@@ -550,13 +587,19 @@ function placeAt(wx,wy){
   const P=PLACEABLES[ty];
   if(P.road){
     const pr=nearestPath(wx,wy);
-    if(!pr||pr.d>76*pr.wf){toast('⚠️ '+P.name+'只能建在道路上');return;}
-    if(pr.sep>5){toast('⚠️ 岔路口无法施工');return;}
+    if(!pr||pr.d>76*pr.wf){toast('⚠️ '+P.name+'只能选在道路上');return;}
+    if(pr.sep>5){toast('⚠️ 岔路口无法'+(P.drop?'空降':'施工'));return;}
     if(G.pvp&&NET&&!NET.isHost){
       if(G.money<P.cost||G.pcds[ty][0]>0)return;
       if(pr.s>L-260){toast('⚠️ 离敌方城堡太近');return;}
       NET.sendCmd({a:'p',t:ty,x:Math.round(WORLD_W-wx),y:Math.round(WORLD_H-wy)});
-      toast('🔨 建造指令已发送');
+      toast(P.drop?'🪂 空降指令已发送':'🔨 建造指令已发送');
+      return;
+    }
+    if(P.drop){
+      if(pr.s>L-260){toast('⚠️ 离敌方城堡太近');return;}
+      airdropCore(0,pr.s);
+      toast('🪂 守备队空降完成，坚守 '+P.life+' 秒');
       return;
     }
     buildingPlaceCore(0,ty,pr.s,true);
