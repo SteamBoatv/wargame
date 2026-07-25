@@ -87,12 +87,18 @@ const TURRET={cost:250,cd:45,life:25,range:260,dmg:35,splash:55,turn:1.6,fireCd:
 const incomeCost=lvl=>Math.round(100*Math.pow(1.5,lvl));
 const DIFFS={easy:{mult:0.8},normal:{mult:1.0},hard:{mult:1.22}};
 /* ---------------- 天气 ---------------- */
+/* 天气＝战斗中随机降临的临时事件，持续一段时间后转晴（不再是整场固定） */
 const WEATHERS={
   clear:{icon:'☀️',name:'晴朗',desc:''},
-  snow:{icon:'❄️',name:'大雪',speedMul:0.72,tint:'rgba(215,232,255,0.16)',part:'snow',desc:'全军移速 -28%'},
-  heat:{icon:'🔥',name:'酷热',dot:2.5,tint:'rgba(255,120,40,0.10)',part:'heat',desc:'士兵持续失水掉血(不会渴死)，战场更短'},
+  snow:{icon:'❄️',name:'暴雪',speedMul:0.72,tint:'rgba(215,232,255,0.16)',part:'snow',desc:'全军移速 -28%'},
   rain:{icon:'🌧️',name:'暴雨',rangedMul:0.75,speedMul:0.9,tint:'rgba(50,70,130,0.14)',part:'rain',desc:'远程射程 -25%，移速 -10%'},
+  storm:{icon:'🌪️',name:'沙暴',rangedMul:0.6,speedMul:0.85,tint:'rgba(190,150,80,0.18)',part:'storm',desc:'远程射程 -40%，移速 -15%'},
 };
+const WEATHER_KEYS=['clear','snow','rain','storm'];   /* 索引用于 PvP 快照，勿重排 */
+const WEATHER_ROLL=['snow','snow','rain','rain','storm'];
+const WEATHER_FIRST=[40,80];   /* 首次来袭 */
+const WEATHER_DUR=[22,38];     /* 持续 */
+const WEATHER_GAP=[55,100];    /* 转晴后到下一次 */
 /* PvP 快速表情表 */
 const EMOTES=['😄','😡','😏','❤️','💀','😢','👍','🤝'];
 /* ---------------- 兵种家族加成（Roguelike 特训） ---------------- */
@@ -120,7 +126,7 @@ function newRun(diffKey){
 /* 杀戮尖塔式路网：9层×4列，3条随机步道决定节点与连边，同层只能走相连节点 */
 function genMap(){
   const LAYERS=9, COLS=4, ps=['rush','turtle','economy','tricky'];
-  const WPOOL=['clear','clear','clear','snow','heat','rain'];
+  void 0; /* 天气不再绑定节点，改为战斗中随机降临 */
   const grid=Array.from({length:LAYERS},()=>Array(COLS).fill(null));
   const walkCols=[];
   for(let w=0;w<3;w++){
@@ -150,7 +156,6 @@ function genMap(){
     else if(r<0.71)nd.t='chest';
     else if(r<0.86)nd.t='event';
     else nd.t='camp';
-    nd.w=(nd.t==='battle'||nd.t==='elite')?WPOOL[(Math.random()*WPOOL.length)|0]:'clear';
   }
   const start={t:'battle',p:'rush',w:'clear',col:1,done:false,next:[]};
   const boss={t:'boss',p:'boss',w:'clear',col:1,done:false,next:[]};
@@ -175,13 +180,12 @@ function genMap(){
   return map;
 }
 function makeStage(nd){
-  nd=nd||{t:'battle',p:'turtle',w:'clear'};
+  nd=nd||{t:'battle',p:'turtle'};
   const per=PERSONAS[nd.p||'turtle'];
   const dm=DIFFS[RUN?RUN.diffKey:'normal'].mult;
   const layer=RUN?RUN.layer:0;
   let scale=(1+layer*0.08)*dm;
   if(nd.t==='elite')scale*=1.22;
-  const weather=nd.w||'clear';
   const events=[];
   if(nd.t!=='boss'||Math.random()<0.5){
     const nEv=Math.random()<0.65?(Math.random()<0.35?2:1):0;
@@ -189,8 +193,8 @@ function makeStage(nd){
     for(let i=0;i<nEv;i++)
       events.push({at:40+Math.random()*70,type:pool[(Math.random()*pool.length)|0],done:false});
   }
-  return {node:nd,per,weather,events,
-    mapDef:genMapDef({short:weather==='heat',noFork:false}),
+  return {node:nd,per,events,
+    mapDef:genMapDef({noFork:false}),
     aiIncomeMul:per.mult*scale,
     hpMul:clamp(scale,0.75,2.0),
     dmgMul:clamp(1+(scale-1)*0.6,0.8,1.7),

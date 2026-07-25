@@ -404,12 +404,13 @@ function drawWeather(){
       ctx.moveTo(p.x,p.y); ctx.lineTo(p.x+2.5,p.y+10);
     }
     ctx.stroke();
-  }else if(w.part==='heat'){
-    ctx.fillStyle='rgba(255,170,60,0.3)';
+  }else if(w.part==='storm'){
+    /* 沙暴：横向疾走的沙粒 */
+    ctx.fillStyle='rgba(225,195,130,0.55)';
     for(const p of WPARTS){
-      p.y-=p.v*0.7; p.x+=Math.sin(p.y*0.05)*0.5;
-      if(p.y<0){p.y=cssH+4;p.x=Math.random()*cssW;}
-      ctx.fillRect(p.x,p.y,2,2);
+      p.x-=p.v*9; p.y+=Math.sin(p.x*0.03)*0.8;
+      if(p.x<-6){p.x=cssW+6;p.y=Math.random()*cssH;}
+      ctx.fillRect(p.x,p.y,7,2);
     }
   }
 }

@@ -10,7 +10,8 @@ function newGame(stage){
   const isPvp=stage.node&&stage.node.t==='pvp';
   G={stage,per,t:0,over:0,
      cmdr0:c0,cmdr1:c1,
-     weather:WEATHERS[stage.weather||'clear'],
+     weather:WEATHERS.clear,weatherKey:'clear',weatherT:0,
+     weatherNext:rand(WEATHER_FIRST[0],WEATHER_FIRST[1]),
      events:(stage.events||[]).map(e=>({...e})),
      piles:[],bountyT:0,
      money:150+(RUN?RUN.mods.gold+RUN.goldCarry:0),
@@ -431,14 +432,7 @@ function update(dt){
   }
   for(const b of G.booms)b.t+=dt;
   G.booms=G.booms.filter(b=>b.t<0.9);
-  /* 天气：酷热持续掉血（最低保留 12% 生命，不会渴死） */
-  if(G.weather.dot){
-    for(const u of G.units){
-      if(u.dying||UNITS[u.type].cls==='bldg')continue; /* 建筑不脱水 */
-      const fl=u.max*0.12;
-      if(u.hp>fl)u.hp=Math.max(fl,u.hp-G.weather.dot*dt);
-    }
-  }
+  updateWeather(dt);
   if(G.bountyT>0)G.bountyT-=dt;
   for(const ev of G.events)
     if(!ev.done&&G.t>=ev.at){ev.done=true;triggerEvent(ev.type);}
@@ -451,6 +445,38 @@ function update(dt){
   G.flash=Math.max(0,G.flash-dt*1.2);
   G.shake=Math.max(0,G.shake-dt*1.6);
   if(G.pvp&&G.pvpHost&&NET)netHostSnap(dt);
+}
+
+/* ---------------- 天气：随机降临 → 持续 → 转晴 ---------------- */
+function setWeather(key,dur,silent){
+  G.weatherKey=key;
+  G.weather=WEATHERS[key]||WEATHERS.clear;
+  G.weatherT=dur||0;
+  if(silent)return;
+  if(key==='clear'){
+    toast('☀️ 天气转晴');
+    netFx({k:'wx',key:'clear'});
+  }else{
+    const w=G.weather;
+    toast(w.icon+' '+w.name+'来袭：'+w.desc);
+    showBanner(w.icon+' '+w.name+'!');
+    sFlag();
+    netFx({k:'wx',key});
+  }
+}
+function updateWeather(dt){
+  if(G.weatherT>0){
+    G.weatherT-=dt;
+    if(G.weatherT<=0){
+      setWeather('clear',0);
+      G.weatherNext=rand(WEATHER_GAP[0],WEATHER_GAP[1]);
+    }
+    return;
+  }
+  G.weatherNext-=dt;
+  if(G.weatherNext<=0)
+    setWeather(WEATHER_ROLL[(Math.random()*WEATHER_ROLL.length)|0],
+               rand(WEATHER_DUR[0],WEATHER_DUR[1]));
 }
 
 /* ---------------- 战场中立事件 ---------------- */

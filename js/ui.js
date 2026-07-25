@@ -45,6 +45,10 @@ function refreshHUD(){
       if(ic)ic.textContent=G.incomeLvl>=INCOME_MAX_LVL?'MAX':'💰'+incomeCost(G.incomeLvl);
     }
   }
+  /* 天气标签：显示当前天气与剩余秒数 */
+  const wt=$('wTag');
+  if(G.weatherKey&&G.weatherKey!=='clear')wt.textContent=G.weather.icon+Math.max(0,Math.ceil(G.weatherT))+'s';
+  else if(wt.textContent)wt.textContent='';
   $('emoteWrap').style.display=(G&&mode==='play'&&!G.over)?'flex':'none';
   $('btnEmote').style.display=(G&&G.pvp)?'':'none';
   for(const pt of cmdrOf(0).place){
@@ -270,13 +274,12 @@ function applyPerk(pk){
   RUN.perks.push(pk.id);
 }
 function nodeLabel(nd){
-  const w=(nd.w&&nd.w!=='clear')?' '+WEATHERS[nd.w].icon:'';
   if(nd.t==='boss')return '👹 魔王要塞';
   if(nd.t==='chest')return '🎁 宝箱';
   if(nd.t==='event')return '❓ 奇遇';
   if(nd.t==='camp')return '🏕️ 训练营';
   const per=PERSONAS[nd.p];
-  return (nd.t==='elite'?'⭐':per.icon)+' '+per.name+(nd.t==='elite'?'·精英':'')+w;
+  return (nd.t==='elite'?'⭐':per.icon)+' '+per.name+(nd.t==='elite'?'·精英':'');
 }
 function showMap(){
   mode='map';
@@ -397,12 +400,7 @@ function startStage(nd){
   $('mapov').classList.add('hidden');
   toast(stage.per.icon+' '+stage.per.name+(nd.t==='elite'?'（精英）':'')+' — 战斗开始！');
   keepAwake();
-  const w=WEATHERS[stage.weather];
-  $('wTag').textContent=stage.weather!=='clear'?w.icon:'';
-  if(stage.weather!=='clear'){
-    toast(w.icon+' '+w.name+'：'+w.desc);
-    showBanner(w.icon+' '+w.name);
-  }
+  $('wTag').textContent='';
   startMusic();
 }
 function showReward(title,poolMode){

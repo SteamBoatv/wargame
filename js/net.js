@@ -147,17 +147,15 @@ function netStartMatch(){
   if(!NET||!NET.isHost||!NET.peer)return;
   if(!NET.myLocked||!NET.peerLocked){toast('⌛ 双方确认指挥官后才能开战');return;}
   const def=genMapDef({});
-  const wks=['snow','heat','rain'];
-  const weather=Math.random()<0.5?'clear':wks[(Math.random()*wks.length)|0];
   const events=[];
   if(Math.random()<0.7)events.push({at:45+Math.random()*60,type:['gold','meteor','bounty'][(Math.random()*3)|0],done:false});
   const c0=NET.myCmdr||'marshal', c1=NET.peerCmdr||'marshal';
-  NET.sendMeta({k:'start',def,weather,events,c0,c1});
-  netStartCommon(def,weather,events,true,c0,c1);
+  NET.sendMeta({k:'start',def,events,c0,c1});
+  netStartCommon(def,events,true,c0,c1);
 }
 function netStartGuest(mt){
   /* 客机镜像：自己是本地 side0，所以自己的指挥官是 mt.c1 */
-  netStartCommon(mt.def,mt.weather,mt.events||[],false,mt.c1||'marshal',mt.c0||'marshal');
+  netStartCommon(mt.def,mt.events||[],false,mt.c1||'marshal',mt.c0||'marshal');
 }
 function mirrorDef(def){
   return {
@@ -168,10 +166,10 @@ function mirrorDef(def){
     flags:def.flags.map(f=>1-f),
   };
 }
-function netStartCommon(def,weather,events,isHost,myCmdr,foeCmdr){
+function netStartCommon(def,events,isHost,myCmdr,foeCmdr){
   RUN=null; /* 对战不带远征强化，保证公平 */
   const stage={
-    node:{t:'pvp'},per:PVP_PER,weather,
+    node:{t:'pvp'},per:PVP_PER,
     cmdr0:myCmdr||'marshal',cmdr1:foeCmdr||'marshal',
     events:isHost?events:[],
     mapDef:isHost?def:mirrorDef(def),
@@ -190,9 +188,7 @@ function netStartCommon(def,weather,events,isHost,myCmdr,foeCmdr){
   ['pvpov','menu','mapov'].forEach(id=>$(id).classList.add('hidden'));
   toast('⚔️ 对战开始！你是蓝方（下方），摧毁对方城堡获胜');
   keepAwake();
-  const w=WEATHERS[weather];
-  $('wTag').textContent=weather!=='clear'?w.icon:'';
-  if(weather!=='clear'){toast(w.icon+' '+w.name+'：'+w.desc);showBanner(w.icon+' '+w.name);}
+  $('wTag').textContent='';
   startMusic();
 }
 
@@ -240,6 +236,8 @@ function netHostSnap(dt){
     NET.sendSnap({
       t:Math.round(G.t*10)/10,
       sp:Math.round((G.pvpSpeed||1)*100)/100,
+      wk:Math.max(0,WEATHER_KEYS.indexOf(G.weatherKey||'clear')),
+      wt:Math.round(G.weatherT*10)/10,
       m0:G.money|0,m1:G.aiMoney|0,
       i0:G.income,i1:G.aiIncome,
       e0:G.era,e1:G.aiEra,
@@ -266,6 +264,12 @@ function netApplySnap(sn){
   if(!G||!G.pvp)return;
   if(Math.abs(G.t-sn.t)>0.5)G.t=sn.t;
   if(sn.sp&&sn.sp!==G.pvpSpeed){G.pvpSpeed=sn.sp;updateSpeedBtn();}
+  /* 天气由主机权威决定，客机跟随（否则两边减速不一致会失同步） */
+  if(sn.wk!==undefined){
+    const wkey=WEATHER_KEYS[sn.wk]||'clear';
+    if(wkey!==G.weatherKey)setWeather(wkey,sn.wt,true);
+    G.weatherT=sn.wt;
+  }
   G.money=sn.m1;G.income=sn.i1;
   if(G.era!==sn.e1){G.era=sn.e1;buildUnitButtons();} /* 时代变更必须重建兵种栏（修复客机进化后无法出兵） */
   G.xp=sn.x1;G.incomeLvl=sn.il1;
@@ -362,6 +366,11 @@ function netApplyFx(f){
   else if(f.k==='ev'){toast('👑 我方进化完成！');G.flash=1;sEvolve();}
   else if(f.k==='evh'){toast('⚠️ 对方进化到了王国时代！');G.flash=1;sEvolve();}
   else if(f.k==='bn')showBanner(f.x);
+  else if(f.k==='wx'){
+    const w=WEATHERS[f.key]||WEATHERS.clear;
+    if(f.key==='clear')toast('☀️ 天气转晴');
+    else{toast(w.icon+' '+w.name+'来袭：'+w.desc);showBanner(w.icon+' '+w.name+'!');sFlag();}
+  }
 }
 
 /* ---- 倍速申请（+0.25/次，对方同意才生效；被拒 1 分钟冷却，次数不限） ---- */
