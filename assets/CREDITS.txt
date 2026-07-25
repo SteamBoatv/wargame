@@ -1,4 +1,5 @@
 Art & audio credits (all free licenses):
+- Sci-Fi Lab series (Mecha Boss + Drone / Droids Pack / Cyborg) and Spire Tower Pack 1 by Foozle - CC0. https://foozlecc.itch.io/ (mechanized faction; team colors produced by hue-shifting the originals)
 - Tiny Swords by Pixel Frog - free for personal & commercial use (credit optional; old version CC0). https://pixelfrog-assets.itch.io/tiny-swords
 - MiniWorldSprites by Shade (merchant-shade) - CC0. https://opengameart.org/content/miniworld-sprites
 - Explosion Set 1 by M484 Games - CC0. https://opengameart.org/content/explosion-set-1-m484-games

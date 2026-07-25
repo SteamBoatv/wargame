@@ -101,6 +101,25 @@ let MUSIC=null, meleeAlt=false, lastCoinS=0;
     im.onload=()=>{ASSETS.bldg[bc][bk]=im;};
     im.src='assets/ts/bldg_'+bc+'_'+bk+'.png';
   }
+  /* 机械军团（Foozle Sci-Fi Lab, CC0）：单位动画 + 弹道 + 建筑 */
+  ASSETS.mech={blue:{},red:{}};
+  const mechUnits=['cyborg','droid01','droid02','droid03','mecha','drone'];
+  const mechMisc=['proj_a','impact_a','proj_b','impact_b','tower_base','tower_gun','factory','proj_tower'];
+  for(const mc of ['blue','red']){
+    for(const mu of mechUnits)for(const an of ['idle','run','atk']){
+      const im=new Image(), key=mu+'_'+an;
+      im.onload=()=>{
+        ASSETS.mech[mc][key]=im;
+        if(mc==='blue'&&an==='idle'&&typeof G!=='undefined'&&G)buildUnitButtons();
+      };
+      im.src='assets/mech/'+mc+'_'+key+'.png';
+    }
+    for(const mm of mechMisc){
+      const im=new Image(), key=mm;
+      im.onload=()=>{ASSETS.mech[mc][key]=im;};
+      im.src='assets/mech/'+mc+'_'+mm+'.png';
+    }
+  }
   const au={melee1:'assets/audio/melee1.wav',melee2:'assets/audio/melee2.wav',
             magic:'assets/audio/magic.wav',coin:'assets/audio/coin.wav',bow:'assets/audio/bow.wav'};
   for(const k in au){

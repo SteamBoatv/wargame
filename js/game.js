@@ -174,7 +174,8 @@ function fire(u,st,tgt,onBase){
     if(onBase){const b=u.side?BASE0:BASE1;to={x:b.x,y:b.y-30};}
     else{to=unitPos(tgt);ts=tgt;}
     G.projs.push({kind:st.proj,side:u.side,x:from.x,y:from.y-26,tx:to.x,ty:to.y-14,tgt:ts,
-      dmg:st.dmg,cls:st.cls,shooter:u,splash:st.splash||0,sp:st.proj==='arrow'?520:330,ang:0,dead:false});
+      dmg:st.dmg,cls:st.cls,shooter:u,splash:st.splash||0,
+      sp:st.proj==='arrow'?520:(st.proj&&st.proj.startsWith('laser')?640:330),ang:0,dead:false});
     if(st.proj==='arrow')sBow(); else sMagic();
   }else{
     if(onBase)hitBase(enemySide,st.dmg);

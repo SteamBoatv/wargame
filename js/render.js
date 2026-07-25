@@ -68,44 +68,95 @@ function drawBuilding(u,p,st){
   ctx.translate(p.x,p.y);
   if(u.dying){const k=Math.min(1,u.dying/0.45);ctx.globalAlpha=1-k;}
   const col=u.side?'red':'blue';
-  const img=(st.bk!=='barricade'&&ASSETS.bldg&&ASSETS.bldg[col])?ASSETS.bldg[col][st.bk==='tower'?'tower':'house']:null;
-  if(img){
-    const w=st.bk==='tower'?64:78;
-    const h=w*img.height/img.width;
-    ctx.drawImage(img,-w/2,-h+10,w,h);
-  }else if(st.bk==='barricade'){
-    /* 手绘木拒马：横跨路面的交叉木桩 */
-    ctx.strokeStyle='#5d3f20';ctx.lineWidth=7;ctx.lineCap='round';
-    for(let i=-2;i<=2;i++){
-      const bx=i*26;
-      ctx.beginPath();ctx.moveTo(bx-11,6);ctx.lineTo(bx+11,-27);ctx.stroke();
-      ctx.beginPath();ctx.moveTo(bx+11,6);ctx.lineTo(bx-11,-27);ctx.stroke();
+  const M=ASSETS.mech&&ASSETS.mech[col];
+  if(st.bk==='tower'&&M&&M.tower_base){
+    const w=64,h=w*M.tower_base.height/M.tower_base.width;
+    ctx.drawImage(M.tower_base,-w/2,-h+14,w,h);
+    const gimg=M.tower_gun;
+    if(gimg){
+      const n=Math.round(gimg.width/gimg.height), cell=gimg.height;
+      const fi=u.atkT<n*0.07?Math.min(n-1,Math.floor(u.atkT/0.07)):0;
+      const gw=64;
+      ctx.save();
+      if(u.side)ctx.scale(-1,1);
+      /* 炮管坐落在底座顶部的圆盘中心（底座高 h，圆盘中心约在 0.30h 处） */
+      ctx.drawImage(gimg,fi*cell,0,cell,cell,-gw/2,-h+Math.round(h*0.36)-gw*0.5,gw,gw);
+      ctx.restore();
     }
-    ctx.strokeStyle='#8a6b45';ctx.lineWidth=5;
-    ctx.beginPath();ctx.moveTo(-64,-10);ctx.lineTo(64,-10);ctx.stroke();
-    ctx.strokeStyle=u.side?'rgba(255,64,64,.6)':'rgba(46,125,255,.6)';ctx.lineWidth=3;
-    ctx.beginPath();ctx.moveTo(-60,4);ctx.lineTo(60,4);ctx.stroke();
+  }else if(st.bk==='workshop'&&M&&M.factory){
+    const w=68,h=w*M.factory.height/M.factory.width;
+    ctx.drawImage(M.factory,-w/2,-h+14,w,h);
+  }else if(st.bk==='barricade'){
+    /* 机械路障：金属基座 + 能量护栏 */
+    const en=u.side?'rgba(255,110,90,':'rgba(120,200,255,';
+    ctx.fillStyle='#2b323d';
+    for(const bx of [-58,58]){ctx.fillRect(bx-8,-30,16,34);}
+    ctx.fillStyle='#454f5e';
+    for(const bx of [-58,58]){ctx.fillRect(bx-10,-34,20,7);}
+    ctx.fillStyle='#39414f';
+    ctx.fillRect(-58,-26,116,8);
+    ctx.fillRect(-58,-12,116,8);
+    const pulse=0.45+0.25*Math.sin((G?G.t:0)*4+u.s*0.05);
+    ctx.fillStyle=en+pulse.toFixed(2)+')';
+    ctx.fillRect(-58,-24,116,4);
+    ctx.fillRect(-58,-10,116,4);
+    ctx.fillStyle=en+'0.9)';
+    for(const bx of [-58,58]){ctx.fillRect(bx-3,-33,6,4);}
   }else{
-    ctx.font=em(44);ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.fillText(st.emoji,0,-18);
+    const img=(ASSETS.bldg&&ASSETS.bldg[col])?ASSETS.bldg[col][st.bk==='tower'?'tower':'house']:null;
+    if(img){
+      const w=st.bk==='tower'?64:78, h=w*img.height/img.width;
+      ctx.drawImage(img,-w/2,-h+10,w,h);
+    }else{
+      ctx.font=em(44);ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(st.emoji,0,-18);
+    }
   }
   ctx.restore();
   if(!u.dying){
     const w=64,h=6,r=Math.max(0,u.hp/u.max);
-    const by=st.bk==='tower'?120:78;
+    const by=st.bk==='tower'?128:(st.bk==='workshop'?126:52);
     ctx.fillStyle='rgba(0,0,0,.45)';
     ctx.fillRect(p.x-w/2-1,p.y-by,w+2,h+2);
     ctx.fillStyle=u.side?'#ff5a5a':'#43d675';
     ctx.fillRect(p.x-w/2,p.y-by+1,w*r,h);
     if(u.type==='b_workshop'){
       const t='+'+Math.round(wsYield(u))+'/秒';
+      const ty=p.y-by-14;
       ctx.font='bold 13px system-ui,sans-serif';
       ctx.textAlign='center';ctx.textBaseline='middle';
       ctx.lineWidth=3;ctx.strokeStyle='rgba(20,20,20,.7)';
-      ctx.strokeText(t,p.x,p.y-62);
-      ctx.fillStyle='#ffd76a';ctx.fillText(t,p.x,p.y-62);
+      ctx.strokeText(t,p.x,ty);
+      ctx.fillStyle='#ffd76a';ctx.fillText(t,p.x,ty);
     }
   }
+}
+/* 机械单位：帧尺寸随动画不同（例如 Droid01 射击帧 48px、待机 32px），
+   按 每源像素固定屏幕尺寸(mpx) 缩放并底部对齐，保证机体大小一致 */
+function drawMechUnit(u,p,st,dir){
+  const set=ASSETS.mech[u.side?'red':'blue'];
+  const runImg=set[st.mech+'_run'];
+  if(!runImg)return false;
+  const atkImg=set[st.mech+'_atk'], idleImg=set[st.mech+'_idle'];
+  const px=st.mpx||1.3;
+  let img,fi;
+  const aFr=atkImg?Math.round(atkImg.width/atkImg.height):0;
+  if(atkImg&&u.atkT<aFr*0.055){
+    img=atkImg;
+    fi=Math.min(aFr-1,Math.floor(u.atkT/0.055));
+  }else if(u.moving){
+    img=runImg;
+    const n=Math.round(img.width/img.height);
+    fi=Math.floor(u.animT*10)%n;
+  }else{
+    img=idleImg||runImg;
+    const n=Math.round(img.width/img.height);
+    fi=((Math.floor((G?G.t:0)*8+u.off))%n+n)%n;
+  }
+  if(p.tx*dir<-0.05)ctx.scale(-1,1);
+  const cell=img.height, dw=cell*px;
+  ctx.drawImage(img,fi*cell,0,cell,cell,-dw/2,-dw+8,dw,dw);
+  return true;
 }
 function drawUnit(u,p){
   const st=UNITS[u.type], dir=u.side?-1:1;
@@ -132,7 +183,9 @@ function drawUnit(u,p){
   const gobSheet=st.gob?(ASSETS.gob[(G&&G.stage)?G.stage.gobColor:'red']||{})[st.gob]:null;
   const set=st.ts?ASSETS.ts[unitColor(u.side,st)]:null;
   const runImg=set?set[TS_UNITS[st.ts].run]:null;
-  if(gobSheet){
+  if(st.mech&&drawMechUnit(u,p,st,dir)){
+    /* 机械单位已绘制 */
+  }else if(gobSheet){
     const meta=GOB_META[st.gob];
     let row,n,fi;
     if(u.atkT<meta.atk[1]*0.1){row=meta.atk[0];n=meta.atk[1];fi=Math.min(n-1,Math.floor(u.atkT*10));}
@@ -239,6 +292,32 @@ function drawProj(p){
     ctx.fillStyle='#14161c';
     ctx.beginPath(); ctx.arc(0,0,6,0,TAU); ctx.fill();
     ctx.strokeStyle='#4a5060'; ctx.lineWidth=2; ctx.stroke();
+    ctx.restore();
+    return;
+  }
+  /* 机械激光弹道 */
+  if(p.kind==='laser_a'||p.kind==='laser_b'||p.kind==='laser_t'){
+    const MM=ASSETS.mech&&ASSETS.mech[p.side?'red':'blue'];
+    const key=p.kind==='laser_a'?'proj_a':(p.kind==='laser_b'?'proj_b':'proj_tower');
+    const img=MM&&MM[key];
+    if(img){
+      ctx.rotate(p.ang);
+      if(p.kind==='laser_t'){
+        const w=26,h=w*img.height/img.width;
+        ctx.rotate(Math.PI/2);
+        ctx.drawImage(img,-w/2,-h/2,w,h);
+      }else{
+        const cell=img.height, n=Math.round(img.width/cell);
+        const fi=Math.floor((G?G.t:0)*14)%n;
+        const dw=30;
+        ctx.drawImage(img,fi*cell,0,cell,cell,-dw/2,-dw/2,dw,dw);
+      }
+      ctx.restore();
+      return;
+    }
+    ctx.rotate(p.ang);
+    ctx.fillStyle=p.side?'#ff8a6a':'#7ad4ff';
+    ctx.fillRect(-9,-2.5,18,5);
     ctx.restore();
     return;
   }

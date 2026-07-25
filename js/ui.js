@@ -93,14 +93,16 @@ function buildUnitButtons(){
     if(COUNTER[st.cls])t+=' 克:'+Object.keys(COUNTER[st.cls]).map(c=>CLS_NAME[c]).join('/');
     if(st.cls==='tank')t+=' 受箭伤减半';
     b.title=t;
+    const mIdle=st.mech?(ASSETS.mech&&ASSETS.mech.blue[st.mech+'_idle']):null;
     const set=st.ts?ASSETS.ts[G&&G.era===2?'black':'blue']:null;
-    const idle=set?set[TS_UNITS[st.ts].idle]:null;
+    const idle=mIdle||(set?set[TS_UNITS[st.ts].idle]:null);
     if(idle){
       b.innerHTML='<canvas class="be bi" width="40" height="40"></canvas><span class="bn">'+st.name+'</span><span class="bc">💰'+st.cost+'</span>';
       const cc=b.querySelector('canvas').getContext('2d');
       cc.imageSmoothingEnabled=false;
       const cell=idle.height;
-      cc.drawImage(idle,cell*0.22,cell*0.16,cell*0.56,cell*0.64,0,0,40,40);
+      if(mIdle)cc.drawImage(idle,0,0,cell,cell,0,0,40,40);
+      else cc.drawImage(idle,cell*0.22,cell*0.16,cell*0.56,cell*0.64,0,0,40,40);
     }else{
       b.innerHTML='<span class="be">'+st.emoji+'</span><span class="bn">'+st.name+'</span><span class="bc">💰'+st.cost+'</span>';
     }
