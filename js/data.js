@@ -17,13 +17,14 @@ const UNITS={
   torch:{emoji:'🔥',name:'火把狂徒',cls:'inf',   gob:'torch', era:1,w:30,cost:45, hp:95, dmg:12,cd:0.7,range:28, speed:95,build:1.0},
   tnt:{emoji:'🧨',name:'TNT投手', cls:'ranged',gob:'tnt',   era:1,w:16,cost:110,hp:85, dmg:22,cd:1.8,range:180,speed:55,build:1.9,proj:'dynamite',splash:60},
   barrel:{emoji:'💣',name:'滚桶兵', cls:'bomb',  gob:'barrel',era:1,w:14,cost:90, hp:140,dmg:46,cd:1,  range:26, speed:85,build:1.6,splash:55},
-  /* ---- 攻城工程师：机械化军团（Foozle Sci-Fi Lab, CC0） ---- */
+  /* ---- 攻城工程师：机械化军团（Foozle Sci-Fi Lab, CC0） ----
+     mpx = 每源像素对应的屏幕像素；单位实际高度 = MECH_META[sheet].ch * mpx */
   militia:{emoji:'🤖',name:'改造兵',cls:'inf',   mech:'cyborg', mpx:1.75,era:1,w:28,cost:40, hp:90, dmg:10,cd:0.8,range:28, speed:66,build:1.0},
-  crossbow:{emoji:'🛸',name:'浮游炮',cls:'ranged',mech:'droid01',mpx:1.55,era:1,w:20,cost:95, hp:80, dmg:14,cd:1.4,range:200,speed:52,build:2.0,proj:'laser_a'},
-  ram:{emoji:'🚜',name:'工程重车',cls:'siege', mech:'mecha',  mpx:1.05,era:1,w:14,cost:150,hp:260,dmg:20,cd:1.2,range:34, speed:44,build:2.4},
-  militia2:{emoji:'⚙️',name:'突击炮车',cls:'inf', mech:'droid02',mpx:1.5,era:2,w:28,cost:60, hp:150,dmg:17,cd:0.8,range:40, speed:66,build:1.2},
-  crossbow2:{emoji:'🔫',name:'重炮坦克',cls:'ranged',mech:'droid03',mpx:1.75,era:2,w:20,cost:145,hp:130,dmg:23,cd:1.3,range:210,speed:52,build:2.2,proj:'laser_b'},
-  ram2:{emoji:'🚜',name:'重型机甲',cls:'siege',mech:'mecha',  mpx:1.35,era:2,w:14,cost:230,hp:430,dmg:33,cd:1.2,range:34, speed:42,build:2.6},
+  crossbow:{emoji:'🛸',name:'浮游炮',cls:'ranged',mech:'droid01',mpx:1.3, era:1,w:20,cost:95, hp:80, dmg:14,cd:1.4,range:200,speed:52,build:2.0,proj:'laser_a'},
+  ram:{emoji:'🚜',name:'工程重车',cls:'siege', mech:'mecha',  mpx:1.1, era:1,w:14,cost:150,hp:260,dmg:20,cd:1.2,range:34, speed:44,build:2.4},
+  militia2:{emoji:'⚙️',name:'突击炮车',cls:'inf', mech:'droid02',mpx:1.5, era:2,w:28,cost:60, hp:150,dmg:17,cd:0.8,range:40, speed:66,build:1.2},
+  crossbow2:{emoji:'🔫',name:'重炮坦克',cls:'ranged',mech:'droid03',mpx:2.0,era:2,w:20,cost:145,hp:130,dmg:23,cd:1.3,range:210,speed:52,build:2.2,proj:'laser_b'},
+  ram2:{emoji:'🚜',name:'重型机甲',cls:'siege',mech:'mecha',  mpx:1.38,era:2,w:14,cost:230,hp:430,dmg:33,cd:1.2,range:34, speed:42,build:2.6},
   /* ---- 建筑（速度为0的路上实体，占位阻路可被攻击） ---- */
   b_barricade:{emoji:'🚧',name:'路障', cls:'bldg',bk:'barricade',era:1,w:0,cost:120,hp:900,dmg:0, cd:9,  range:0,  speed:0,build:0},
   b_tower:{emoji:'🗼',name:'激光塔',cls:'bldg',bk:'tower',   era:1,w:0,cost:220,hp:450,dmg:14,cd:0.9,range:230,speed:0,build:0,proj:'laser_t',mz:[14,-78]},
@@ -41,6 +42,12 @@ const COUNTER={ /* 克制环：剑克枪/建筑 → 枪克盾/爆破/攻城 → 
   bomb:{bldg:1.8},
 };
 const CLS_NAME={inf:'步兵',spear:'枪兵',ranged:'远程',tank:'重甲',heal:'修士',bomb:'爆破',siege:'攻城',bldg:'建筑'};
+/* 机械素材几何：cell=方形图集格边长，ch=格内实际内容高度（源像素，内容贴格底对齐）。
+   由 build_mech_assets.py 输出的 assets/mech/meta.json 同步而来，改素材后需一并更新。 */
+const MECH_META={
+  cyborg:{cell:64,ch:32}, droid01:{cell:48,ch:39}, droid02:{cell:48,ch:35},
+  droid03:{cell:48,ch:19}, mecha:{cell:80,ch:61},  drone:{cell:64,ch:35},
+};
 /* ---------------- 指挥官 ---------------- */
 const COMMANDERS={
   marshal:{

@@ -226,9 +226,9 @@ function drawUnit(u,p){
     /* 血条跟随精灵实际高度：机械单位按 mpx 缩放，高度差异很大 */
     let by=45;
     if(st.mech){
-      const set=ASSETS.mech&&ASSETS.mech[u.side?'red':'blue'];
-      const si=set&&(set[st.mech+'_idle']||set[st.mech+'_run']);
-      if(si)by=Math.round(si.height*(st.mpx||1.3))-4;
+      /* 用内容高度而非图集格高，否则血条会飘到单位头顶很远的空白处 */
+      const mm=MECH_META[st.mech];
+      if(mm)by=Math.round(mm.ch*(st.mpx||1.3))+7;
     }
     ctx.fillStyle='rgba(0,0,0,.45)';
     ctx.fillRect(p.x-w/2-1,p.y-by,w+2,h+2);

@@ -104,8 +104,13 @@ function buildUnitButtons(){
       const cc=b.querySelector('canvas').getContext('2d');
       cc.imageSmoothingEnabled=false;
       const cell=idle.height;
-      if(mIdle)cc.drawImage(idle,0,0,cell,cell,0,0,40,40);
-      else cc.drawImage(idle,cell*0.22,cell*0.16,cell*0.56,cell*0.64,0,0,40,40);
+      if(mIdle){
+        /* 图集格底部才是单位本体，直接整格缩放会画出一大片空白 */
+        const mm=MECH_META[st.mech], ch=mm?mm.ch:cell;
+        const sc=Math.min(40/cell,40/ch);
+        const dw=cell*sc, dh=ch*sc;
+        cc.drawImage(idle,0,cell-ch,cell,ch,(40-dw)/2,40-dh,dw,dh);
+      }else cc.drawImage(idle,cell*0.22,cell*0.16,cell*0.56,cell*0.64,0,0,40,40);
     }else{
       b.innerHTML='<span class="be">'+st.emoji+'</span><span class="bn">'+st.name+'</span><span class="bc">💰'+st.cost+'</span>';
     }

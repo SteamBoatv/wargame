@@ -1,0 +1,26 @@
+{
+ "cyborg": {
+  "cell": 64,
+  "ch": 32
+ },
+ "droid01": {
+  "cell": 48,
+  "ch": 39
+ },
+ "droid02": {
+  "cell": 48,
+  "ch": 35
+ },
+ "droid03": {
+  "cell": 48,
+  "ch": 19
+ },
+ "mecha": {
+  "cell": 80,
+  "ch": 61
+ },
+ "drone": {
+  "cell": 64,
+  "ch": 35
+ }
+}
