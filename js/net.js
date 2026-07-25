@@ -34,7 +34,7 @@ async function netOpen(code,isHost){
     NET.peer=id;
     netLobbyStatus();
     if(NET.isHost)sendMeta({k:'hi'});
-    netSendCmdrPick();
+    if(NET.myLocked)sendMeta({k:'cmdrLock',c:NET.myCmdr});
     sFlag();
   });
   room.onPeerLeave(()=>{
@@ -47,8 +47,8 @@ async function netOpen(code,isHost){
   onFx(f=>{if(NET&&!NET.isHost)netApplyFx(f);});
   onMeta(mt=>{
     if(!NET)return;
-    if(mt.k==='hi'){NET.peer=NET.peer||'host';netLobbyStatus();netSendCmdrPick();}
-    else if(mt.k==='cmdr'){NET.peerCmdr=mt.c;netLobbyStatus();}
+    if(mt.k==='hi'){NET.peer=NET.peer||'host';netLobbyStatus();}
+    else if(mt.k==='cmdrLock'){NET.peerCmdr=mt.c;NET.peerLocked=true;netLobbyStatus();sFlag();}
     else if(mt.k==='start'&&!NET.isHost)netStartGuest(mt);
     else if(mt.k==='end'&&!NET.isHost)netShowEnd(mt.winner===1,null);
     else if(mt.k==='spdReq')showSpdAsk(mt.to);
@@ -61,7 +61,6 @@ async function netCreate(){
   $('pvpStatus').textContent='正在创建房间…';
   try{await netOpen(netCode(),true);}
   catch(e){$('pvpStatus').textContent='创建失败：'+(e&&e.message||e);return;}
-  NET.myCmdr=selCmdr;
   netLobbyStatus();
 }
 async function netJoin(code){
@@ -70,7 +69,6 @@ async function netJoin(code){
   $('pvpStatus').textContent='正在加入房间 '+code+' …';
   try{await netOpen(code,false);}
   catch(e){$('pvpStatus').textContent='加入失败：'+(e&&e.message||e);return;}
-  NET.myCmdr=selCmdr;
   netLobbyStatus();
 }
 function showPvpLobby(){
@@ -81,21 +79,38 @@ function showPvpLobby(){
 function netLink(){
   return location.origin+location.pathname+'?pvp='+NET.code;
 }
-function netSendCmdrPick(){
-  if(NET&&NET.peer&&NET.sendMeta)NET.sendMeta({k:'cmdr',c:NET.myCmdr||'marshal'});
+/* 大厅流程：连接 → 双方选人并确认 → 房主开战 */
+function netLockCmdr(){
+  if(!NET||NET.myLocked)return;
+  if(!NET.peer){toast('⌛ 等对方加入后再确认');return;}
+  NET.myCmdr=selCmdr;
+  NET.myLocked=true;
+  NET.sendMeta({k:'cmdrLock',c:selCmdr});
+  netLobbyStatus();
+  sClick();
 }
 function netLobbyStatus(){
   if(!NET)return;
   $('pvpLink').textContent=NET.isHost?netLink():('房间号：'+NET.code);
   $('btnPvpCopy').style.display=NET.isHost?'':'none';
-  const foe=NET.peerCmdr?COMMANDERS[NET.peerCmdr]:null;
-  $('pvpFoeCmdr').textContent=NET.peer?(foe?('对方指挥官：'+foe.icon+' '+foe.name):'对方选择指挥官中…'):'';
-  if(NET.peer){
-    $('pvpStatus').textContent='✅ 双方已就位'+(NET.isHost?'，可以开战':'，等待房主开始…');
-    $('btnPvpStart').style.display=NET.isHost?'':'none';
-  }else{
+  $('pvpPickSec').style.display=NET.peer?'flex':'none';
+  const foe=NET.peerLocked?COMMANDERS[NET.peerCmdr]:null;
+  $('pvpFoeCmdr').textContent=NET.peer?(foe?('✅ 对方已确认：'+foe.icon+' '+foe.name):'⌛ 对方选择指挥官中…'):'';
+  $('btnCmdrLock').style.display=NET.myLocked?'none':'';
+  buildCmdrPick('pvpCmdrPick');
+  const both=NET.myLocked&&NET.peerLocked;
+  if(!NET.peer){
     $('pvpStatus').textContent=NET.isHost?'⌛ 等待好友通过链接加入…':'⌛ 正在连接房主…（P2P 打洞最多需十几秒）';
     $('btnPvpStart').style.display='none';
+  }else if(!NET.myLocked){
+    $('pvpStatus').textContent='🎖️ 双方已连接，请选择你的指挥官并确认';
+    $('btnPvpStart').style.display='none';
+  }else if(!both){
+    $('pvpStatus').textContent='✅ 已确认，等待对方选择指挥官…';
+    $('btnPvpStart').style.display='none';
+  }else{
+    $('pvpStatus').textContent=NET.isHost?'⚔️ 双方就绪，可以开战！':'⚔️ 双方就绪，等待房主开始…';
+    $('btnPvpStart').style.display=NET.isHost?'':'none';
   }
 }
 function netLeave(){
@@ -109,6 +124,7 @@ function netLeave(){
 /* ---- 开局 ---- */
 function netStartMatch(){
   if(!NET||!NET.isHost||!NET.peer)return;
+  if(!NET.myLocked||!NET.peerLocked){toast('⌛ 双方确认指挥官后才能开战');return;}
   const def=genMapDef({});
   const wks=['snow','heat','rain'];
   const weather=Math.random()<0.5?'clear':wks[(Math.random()*wks.length)|0];

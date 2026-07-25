@@ -64,10 +64,13 @@
 <div class="overlay hidden" id="pvpov">
   <div class="panel">
     <h1>⚔️ 好友对战</h1>
-    <p style="margin:0">选择你的指挥官：</p>
-    <div class="diffs" id="pvpCmdrPick"></div>
-    <p id="pvpFoeCmdr" style="margin:0;font-size:13px"></p>
     <p id="pvpStatus"></p>
+    <div id="pvpPickSec" style="display:none;flex-direction:column;align-items:center;gap:8px">
+      <p style="margin:0">选择你的指挥官：</p>
+      <div class="diffs" id="pvpCmdrPick"></div>
+      <div class="diffs"><button class="obtn" id="btnCmdrLock">✅ 确认指挥官</button></div>
+      <p id="pvpFoeCmdr" style="margin:0;font-size:13px"></p>
+    </div>
     <p id="pvpLink" style="word-break:break-all;font-size:12px"></p>
     <div class="diffs">
       <button class="obtn" id="btnPvpCopy">📋 复制邀请链接</button>

@@ -435,6 +435,7 @@ $('btnMenu').addEventListener('pointerdown',e=>{
 });
 $('btnPvp').addEventListener('pointerdown',e=>{e.preventDefault();netCreate();});
 $('btnPvpStart').addEventListener('pointerdown',e=>{e.preventDefault();netStartMatch();});
+$('btnCmdrLock').addEventListener('pointerdown',e=>{e.preventDefault();netLockCmdr();});
 $('btnPvpCancel').addEventListener('pointerdown',e=>{
   e.preventDefault();
   netLeave();
@@ -453,12 +454,13 @@ function buildCmdrPick(elId){
     b.className='obtn cmbtn'+(selCmdr===key?' sel':'');
     b.type='button';
     b.innerHTML='<span class="pic">'+c.icon+'</span><b>'+c.name+'</b><small>'+c.desc+'</small>';
+    if(elId==='pvpCmdrPick'&&typeof NET!=='undefined'&&NET&&NET.myLocked)b.disabled=true;
     b.addEventListener('pointerdown',e=>{
       e.preventDefault();
+      if(typeof NET!=='undefined'&&NET&&NET.myLocked){toast('已确认指挥官，无法更改');return;}
       selCmdr=key;
       buildCmdrPick('cmdrPickMenu');
       buildCmdrPick('pvpCmdrPick');
-      if(typeof NET!=='undefined'&&NET){NET.myCmdr=key;netSendCmdrPick();}
       sClick();
     });
     el.appendChild(b);
