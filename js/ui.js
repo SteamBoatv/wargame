@@ -17,7 +17,10 @@ function refreshHUD(){
   if(!G)return;
   const m='💰'+Math.floor(G.money);
   if(m!==lastMoneyTxt){lastMoneyTxt=m;$('money').textContent=m;}
-  $('incomeTxt').textContent='+'+(G.income+FLAG_INCOME*ownedFlags(0))+'/秒';
+  /* 含反应堆产量：工程师的经济几乎全靠工坊，不算进去 HUD 会显示成"零增长" */
+  let wsy=0;
+  for(const u of G.units)if(!u.dying&&u.side===0&&u.type==='b_workshop')wsy+=wsYield(u);
+  $('incomeTxt').textContent='+'+Math.round(G.income+FLAG_INCOME*ownedFlags(0)+wsy)+'/秒';
   $('hpL').style.width=(G.baseHp[0]/BASE_HP*100)+'%';
   $('hpR').style.width=(G.baseHp[1]/BASE_HP*100)+'%';
   const lock=mode!=='play'||!!G.over||paused;
@@ -192,14 +195,22 @@ const PERKS=[
   {id:'eco', icon:'💰',name:'金矿股份',desc:'基础收入 +3/秒',apply:m=>m.income+=3},
   {id:'spd', icon:'💨',name:'行军号角',desc:'全军移速 +12%',apply:m=>m.speed*=1.12},
   {id:'bld', icon:'⏱️',name:'征兵官',  desc:'生产速度 +25%',apply:m=>m.build*=1.25},
-  {id:'tur', icon:'🛢️',name:'炮兵学院',desc:'重炮冷却 -35%、伤害 +30%',apply:m=>{m.turCd*=0.65;m.turDmg*=1.3;}},
+  {id:'tur', icon:'🛢️',name:'军械学院',desc:'部署技冷却 -35%、重炮伤害 +30%',apply:m=>{m.turCd*=0.65;m.turDmg*=1.3;}},
   {id:'crit',icon:'🎯',name:'致命打击',desc:'暴击率 +8%',apply:m=>m.critAdd+=0.08},
   {id:'heal',icon:'✚', name:'圣光祝福',desc:'修士治疗 +50%',apply:m=>m.heal*=1.5},
   {id:'xp',  icon:'📜',name:'古代典籍',desc:'每战开局自带 50% 进化经验',apply:m=>m.xp0=Math.min(1,m.xp0+0.5)},
   {id:'gold',icon:'🪙',name:'战争资金',desc:'每战开局金币 +150',apply:m=>m.gold+=150},
 ];
-/* 兵种特训强化（训练营/奖励池） */
-const PERKS_UNIT=[
+/* 兵种特训强化（训练营/奖励池）——按指挥官分组，fam 必须匹配 famOf(兵种key) */
+const PERKS_UNIT_MECH=[
+  {id:'m_militia_d', icon:'🤖',name:'高压电刃',desc:'改造兵系攻击 +30%',fam:'militia', k:'dmg',v:1.3},
+  {id:'m_militia_h', icon:'🤖',name:'复合装甲',desc:'改造兵系生命 +35%',fam:'militia', k:'hp', v:1.35},
+  {id:'m_crossbow_d',icon:'🛸',name:'聚焦透镜',desc:'浮游炮系攻击 +30%',fam:'crossbow',k:'dmg',v:1.3},
+  {id:'m_crossbow_r',icon:'🛸',name:'远程校准',desc:'浮游炮系射程 +15%',fam:'crossbow',k:'range',v:1.15},
+  {id:'m_ram_d',     icon:'🚜',name:'动力锤头',desc:'工程车系攻击 +35%',fam:'ram',     k:'dmg',v:1.35},
+  {id:'m_ram_h',     icon:'🚜',name:'反应装甲',desc:'工程车系生命 +40%',fam:'ram',     k:'hp', v:1.4},
+];
+const PERKS_UNIT_KNIGHT=[
   {id:'u_sword_d', icon:'🗡️',name:'剑术大师',desc:'剑士系攻击 +30%',fam:'sword', k:'dmg',v:1.3},
   {id:'u_sword_h', icon:'🗡️',name:'重甲剑士',desc:'剑士系生命 +35%',fam:'sword', k:'hp', v:1.35},
   {id:'u_spear_d', icon:'🔱',name:'破甲枪头',desc:'长枪系攻击 +30%',fam:'spear', k:'dmg',v:1.3},
@@ -211,7 +222,13 @@ const PERKS_UNIT=[
   {id:'u_monk_e',  icon:'✝️',name:'大祭司',  desc:'修士系治疗 +60%',fam:'monk',  k:'heal',v:1.6},
   {id:'u_monk_h',  icon:'✝️',name:'圣职袍',  desc:'修士系生命 +35%',fam:'monk',  k:'hp', v:1.35},
 ];
-function perkById(id){return PERKS.find(x=>x.id===id)||PERKS_UNIT.find(x=>x.id===id);}
+/* 特训卡池随指挥官切换：机械军团的兵种家族是 militia/crossbow/ram，
+   骑士团是 sword/spear/archer/shield/monk —— 发错池子会让强化完全不生效 */
+function unitPerkPool(){
+  return ((RUN&&RUN.cmdr)==='engineer')?PERKS_UNIT_MECH:PERKS_UNIT_KNIGHT;
+}
+const PERKS_UNIT_ALL=PERKS_UNIT_MECH.concat(PERKS_UNIT_KNIGHT);
+function perkById(id){return PERKS.find(x=>x.id===id)||PERKS_UNIT_ALL.find(x=>x.id===id);}
 function applyPerk(pk){
   if(pk.fam){
     const um=RUN.unitMods;
@@ -336,7 +353,8 @@ function runEventNode(){
     applyPerk(p);
     toast('❓ 神秘祭坛：获得 '+p.icon+p.name);
   }else{
-    const p=PERKS_UNIT[(Math.random()*PERKS_UNIT.length)|0];
+    const up=unitPerkPool();
+    const p=up[(Math.random()*up.length)|0];
     applyPerk(p);
     toast('❓ 游方教头：获得 '+p.icon+p.name);
   }
@@ -363,10 +381,10 @@ function showReward(title,poolMode){
   $('rewardTitle').textContent=title;
   const cards=[];
   if(poolMode==='unit'){
-    const pool=[...PERKS_UNIT];
+    const pool=[...unitPerkPool()];
     for(let i=0;i<3&&pool.length;i++)cards.push(pool.splice((Math.random()*pool.length)|0,1)[0]);
   }else{
-    const pg=[...PERKS], pu=[...PERKS_UNIT];
+    const pg=[...PERKS], pu=[...unitPerkPool()];
     for(let i=0;i<3;i++){
       const useUnit=Math.random()<0.35&&pu.length;
       const pool=useUnit?pu:pg;

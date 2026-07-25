@@ -26,16 +26,16 @@ const UNITS={
   ram2:{emoji:'🚜',name:'重型机甲',cls:'siege',mech:'mecha',  mpx:1.35,era:2,w:14,cost:230,hp:430,dmg:33,cd:1.2,range:34, speed:42,build:2.6},
   /* ---- 建筑（速度为0的路上实体，占位阻路可被攻击） ---- */
   b_barricade:{emoji:'🚧',name:'路障', cls:'bldg',bk:'barricade',era:1,w:0,cost:120,hp:900,dmg:0, cd:9,  range:0,  speed:0,build:0},
-  b_tower:{emoji:'🗼',name:'激光塔',cls:'bldg',bk:'tower',   era:1,w:0,cost:220,hp:450,dmg:14,cd:0.9,range:230,speed:0,build:0,proj:'laser_t'},
+  b_tower:{emoji:'🗼',name:'激光塔',cls:'bldg',bk:'tower',   era:1,w:0,cost:220,hp:450,dmg:14,cd:0.9,range:230,speed:0,build:0,proj:'laser_t',mz:[14,-78]},
   b_workshop:{emoji:'🏭',name:'反应堆',cls:'bldg',bk:'workshop',era:1,w:0,cost:200,hp:300,dmg:0, cd:9,  range:0,  speed:0,build:0},
 };
 const ERA_ROSTER={
   1:['sword','spear','archer','shield','monk'],
   2:['sword2','spear2','archer2','shield2','monk2'],
 };
-const COUNTER={ /* 克制环：剑克枪 → 枪克盾/爆破 → 盾挡箭 → 弓克步兵/修士；攻城克建筑 */
-  inf:{spear:1.5},
-  spear:{tank:1.6,bomb:1.6},
+const COUNTER={ /* 克制环：剑克枪/建筑 → 枪克盾/爆破/攻城 → 盾挡箭 → 弓克步兵/修士；攻城重克建筑 */
+  inf:{spear:1.5,bldg:1.6},
+  spear:{tank:1.6,bomb:1.6,siege:1.6},
   ranged:{inf:1.5,heal:1.5},
   siege:{bldg:2.5,tank:1.3},
   bomb:{bldg:1.8},
@@ -105,7 +105,8 @@ const PERSONAS={
 };
 let RUN=null;
 function newRun(diffKey){
-  RUN={diffKey,layer:0,map:genMap(),curNode:null,chosenIdx:0,pendingIdx:0,
+  RUN={diffKey,cmdr:(typeof selCmdr!=='undefined'?selCmdr:'marshal'),
+       layer:0,map:genMap(),curNode:null,chosenIdx:0,pendingIdx:0,
        goldCarry:0,perks:[],unitMods:{},
        mods:{dmg:1,hp:1,speed:1,build:1,heal:1,income:0,gold:0,critAdd:0,xp0:0,turCd:1,turDmg:1}};
 }

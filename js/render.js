@@ -223,14 +223,21 @@ function drawUnit(u,p){
   ctx.restore();
   if(!u.dying){
     const w=34,h=5,r=Math.max(0,u.hp/u.max);
+    /* 血条跟随精灵实际高度：机械单位按 mpx 缩放，高度差异很大 */
+    let by=45;
+    if(st.mech){
+      const set=ASSETS.mech&&ASSETS.mech[u.side?'red':'blue'];
+      const si=set&&(set[st.mech+'_idle']||set[st.mech+'_run']);
+      if(si)by=Math.round(si.height*(st.mpx||1.3))-4;
+    }
     ctx.fillStyle='rgba(0,0,0,.45)';
-    ctx.fillRect(p.x-w/2-1,p.y-45,w+2,h+2);
+    ctx.fillRect(p.x-w/2-1,p.y-by,w+2,h+2);
     ctx.fillStyle=u.side?'#ff5a5a':'#43d675';
-    ctx.fillRect(p.x-w/2,p.y-44,w*r,h);
+    ctx.fillRect(p.x-w/2,p.y-by+1,w*r,h);
     if(u.star){
       ctx.font=em(13);
       ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText('⭐',p.x+22,p.y-46);
+      ctx.fillText('⭐',p.x+22,p.y-by-1);
     }
   }
 }
@@ -303,9 +310,12 @@ function drawProj(p){
     if(img){
       ctx.rotate(p.ang);
       if(p.kind==='laser_t'){
-        const w=26,h=w*img.height/img.width;
+        /* 66x40 是 3 帧非方形表（每帧 22x40），不能套用 cell=height 的切法 */
+        const n=3, cw=Math.floor(img.width/n), ch=img.height;
+        const fi=Math.floor((G?G.t:0)*12)%n;
+        const dh=30, dw=dh*cw/ch;
         ctx.rotate(Math.PI/2);
-        ctx.drawImage(img,-w/2,-h/2,w,h);
+        ctx.drawImage(img,fi*cw,0,cw,ch,-dw/2,-dh/2,dw,dh);
       }else{
         const cell=img.height, n=Math.round(img.width/cell);
         const fi=Math.floor((G?G.t:0)*14)%n;

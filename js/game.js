@@ -170,10 +170,12 @@ function fire(u,st,tgt,onBase){
   const enemySide=1-u.side;
   if(st.proj){
     const from=unitPos(u);
+    /* 高大建筑（激光塔）的炮口远高于步兵，用 mz 覆盖默认枪口高度 */
+    const mzx=st.mz?st.mz[0]*(u.side?-1:1):0, mzy=st.mz?st.mz[1]:-26;
     let to,ts=null;
     if(onBase){const b=u.side?BASE0:BASE1;to={x:b.x,y:b.y-30};}
     else{to=unitPos(tgt);ts=tgt;}
-    G.projs.push({kind:st.proj,side:u.side,x:from.x,y:from.y-26,tx:to.x,ty:to.y-14,tgt:ts,
+    G.projs.push({kind:st.proj,side:u.side,x:from.x+mzx,y:from.y+mzy,tx:to.x,ty:to.y-14,tgt:ts,
       dmg:st.dmg,cls:st.cls,shooter:u,splash:st.splash||0,
       sp:st.proj==='arrow'?520:(st.proj&&st.proj.startsWith('laser')?640:330),ang:0,dead:false});
     if(st.proj==='arrow')sBow(); else sMagic();
@@ -432,7 +434,7 @@ function update(dt){
   /* 天气：酷热持续掉血（最低保留 12% 生命，不会渴死） */
   if(G.weather.dot){
     for(const u of G.units){
-      if(u.dying)continue;
+      if(u.dying||UNITS[u.type].cls==='bldg')continue; /* 建筑不脱水 */
       const fl=u.max*0.12;
       if(u.hp>fl)u.hp=Math.max(fl,u.hp-G.weather.dot*dt);
     }
@@ -490,10 +492,12 @@ function triggerEvent(type){
 function updatePiles(dt){
   for(let i=G.piles.length-1;i>=0;i--){
     const pl=G.piles[i];
-    let claimed=-1;
+    /* 只有活动部队能拾取空投，建筑不行；同时按距离判定归属而非数组顺序 */
+    let claimed=-1,best=1e9;
     for(const u of G.units){
-      if(u.dying)continue;
-      if(Math.abs(u.s-pl.s)<40){claimed=u.side;break;}
+      if(u.dying||UNITS[u.type].cls==='bldg')continue;
+      const d=Math.abs(u.s-pl.s);
+      if(d<40&&d<best){best=d;claimed=u.side;}
     }
     if(claimed>=0){
       if(claimed===0){
@@ -593,6 +597,11 @@ function placeAt(wx,wy){
     if(G.pvp&&NET&&!NET.isHost){
       if(G.money<P.cost||G.pcds[ty][0]>0)return;
       if(pr.s>L-260){toast('⚠️ 离敌方城堡太近');return;}
+      /* 与主机同样的数量上限预检查，避免指令被静默丢弃却提示成功 */
+      if(P.maxAlive&&countBldg(0,P.unit)>=P.maxAlive){
+        toast('⚠️ '+P.name+'最多同时存在 '+P.maxAlive+' 座');
+        return;
+      }
       NET.sendCmd({a:'p',t:ty,x:Math.round(WORLD_W-wx),y:Math.round(WORLD_H-wy)});
       toast(P.drop?'🪂 空降指令已发送':'🔨 建造指令已发送');
       return;

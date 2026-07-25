@@ -4,6 +4,8 @@
    自己永远是"下方蓝方 side0"，全部现有渲染/HUD 代码无需感知联机。 */
 let NET=null;
 const TYPE_KEYS=Object.keys(UNITS);
+/* 弹道类型线材编码表（只可追加，不可重排——索引会写进快照） */
+const PROJ_KINDS=['arrow','dynamite','shell','laser_a','laser_b','laser_t'];
 const PVP_PER={icon:'⚔️',name:'好友对战',roster:null,decide:[9,9],queue:0,eco:0,mult:1,smart:false,evolve:true};
 
 async function netLib(){
@@ -207,6 +209,7 @@ function netApplyCmd(c){
     G.aiMoney-=st.cost;
     G.aiQueue.push({type:k,t:st.build});
   }else if(c.a==='i'){
+    if(!cmdrOf(1).mining)return; /* 指挥官门控：机械军团没有挖矿 */
     if(G.aiIncomeLvl>=INCOME_MAX_LVL)return;
     const cost=incomeCost(G.aiIncomeLvl);
     if(G.aiMoney<cost)return;
@@ -247,8 +250,8 @@ function netHostSnap(dt){
       fl:G.flags.map(f=>[f.owner,Math.round(f.prog*100)]),
       us:G.units.map(u=>[u.uid,TYPE_KEYS.indexOf(u.type),u.side,Math.round(u.s),Math.round(u.off),
         Math.round(u.hp),u.max,(u.moving?1:0)|(u.star?2:0)|(u.dying?4:0)|(u.atkT<0.4?8:0)]),
-      pr:G.projs.map(p=>[p.pid,p.kind==='arrow'?0:(p.kind==='dynamite'?1:2),
-        Math.round(p.x),Math.round(p.y),Math.round(p.ang*100)]),
+      pr:G.projs.map(p=>[p.pid,Math.max(0,PROJ_KINDS.indexOf(p.kind)),
+        Math.round(p.x),Math.round(p.y),Math.round(p.ang*100),p.side?1:0]),
       tr:G.turrets.map(t=>[t.side||0,Math.round(t.x),Math.round(t.y),
         Math.round(t.ang*100),Math.round(t.life*10),Math.round((t.flash||0)*100)]),
       pi:G.piles.map(p=>[Math.round(p.s),p.amt]),
@@ -307,10 +310,12 @@ function netApplySnap(sn){
     pseen[a[0]]=1;
     const x=WORLD_W-a[2], y=WORLD_H-a[3], ang=a[4]/100+Math.PI;
     let p=G._pmap[a[0]];
+    const kind=PROJ_KINDS[a[1]]||'shell';
+    const mside=1-(a[5]||0); /* 镜像：主机 side -> 客机本地 side */
     if(!p){
-      p={pid:a[0],kind:a[1]===0?'arrow':(a[1]===1?'dynamite':'shell'),x,y,_tx:x,_ty:y,ang,side:0,dead:false};
+      p={pid:a[0],kind,x,y,_tx:x,_ty:y,ang,side:mside,dead:false};
       G._pmap[a[0]]=p;
-    }else{p._tx=x;p._ty=y;p.ang=ang;}
+    }else{p._tx=x;p._ty=y;p.ang=ang;p.kind=kind;p.side=mside;}
     newPr.push(p);
   }
   for(const pid in G._pmap)if(!pseen[pid])delete G._pmap[pid];
