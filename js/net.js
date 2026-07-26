@@ -29,7 +29,18 @@ async function netOpen(code,role){
   /* role: 'host' | 'guest' | 'spectator' —— 观众只收不发，且不占玩家位 */
   const isHost=role==='host', spectator=role==='spectator';
   const lib=await netLib();
-  const room=lib.joinRoom({appId:'kip-wargame-pvp-v1'},'wg-'+code);
+  /* Trystero 自带的 STUN 只有 Google×3 + Cloudflare；部分网络会屏蔽其中几个，
+     一旦一个都问不到就拿不到公网地址、必然连不上。turnConfig 是追加而非替换，
+     多备几个不同运营商的（下列均为实测可返回 srflx 的）能显著提高成功率。 */
+  const room=lib.joinRoom({
+    appId:'kip-wargame-pvp-v1',
+    turnConfig:[
+      {urls:'stun:global.stun.twilio.com:3478'},
+      {urls:'stun:stun.nextcloud.com:3478'},
+      {urls:'stun:stun.miwifi.com:3478'},
+      {urls:'stun:stun.chat.bilibili.com:3478'},
+    ],
+  },'wg-'+code);
   const [sendCmd,onCmd]=room.makeAction('c');
   const [sendSnap,onSnap]=room.makeAction('s');
   const [sendFx,onFx]=room.makeAction('f');
@@ -212,6 +223,7 @@ function showPvpLobby(){
   mode='menu';
   $('menu').classList.add('hidden');
   $('pvpov').classList.remove('hidden');
+  if(typeof diagStart==='function')diagStart();  /* 连接诊断：卡住时能看出卡在哪一环 */
 }
 function netLink(){
   return location.origin+location.pathname+'?pvp='+NET.code;
@@ -288,6 +300,7 @@ function netLobbyStatus(){
   }
 }
 function netLeave(){
+  if(typeof diagStop==='function')diagStop();
   if(NET){try{NET.room.leave();}catch(e){}}
   NET=null;
   if(G){G.pvp=false;G.spectator=false;}
