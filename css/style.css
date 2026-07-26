@@ -29,6 +29,11 @@ canvas.bi{width:27px;height:27px;image-rendering:pixelated}
 .qfill{height:100%;background:#c8781e}
 .overlay{position:fixed;inset:0;background:rgba(8,14,26,.74);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;z-index:10;color:#fff;text-align:center;padding:16px}
 .overlay.hidden{display:none}
+/* 大厅类界面铺像素背景图；文字都在羊皮纸面板里，所以只需轻度压暗+暗角衬托面板 */
+#menu,#pvpov{background:
+  radial-gradient(ellipse at center,rgba(6,10,20,.55) 0%,rgba(6,10,20,.28) 58%,rgba(6,10,20,.66) 100%),
+  url('../assets/art/bg_menu.png') center/cover no-repeat #0b1526;
+  image-rendering:pixelated}
 .overlay h1{font-size:clamp(24px,6vw,42px);letter-spacing:2px}
 .overlay p{font-size:13px;line-height:1.8;color:#cfe0ff;max-width:540px}
 .diffs{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
@@ -48,9 +53,18 @@ canvas.bi{width:27px;height:27px;image-rendering:pixelated}
 .cmbtn small{font-size:11px;font-weight:600;line-height:1.35}
 .cmbtn .pic{font-size:24px;line-height:1.2}
 .cmbtn.sel{opacity:1;box-shadow:0 0 10px 3px rgba(255,215,106,.75)}
+/* 指挥官立绘：无图时 buildCmdrPick 会自动退回 .pic 的 emoji */
+.cmbtn .pic.art{display:block;width:84px;height:84px;image-rendering:pixelated;
+  border:3px solid #6b4f2a;background:#1a1410;box-shadow:0 2px 0 rgba(0,0,0,.35)}
+.cmbtn.sel .pic.art{border-color:#ffd76a}
 .pcard .pic{font-size:26px;line-height:1.2}
 .pcard small{font-size:11px;font-weight:600;line-height:1.35}
 #goTitle{font-size:clamp(30px,7vw,50px)}
+/* 结算插图：横屏手机上高度占比要克制，否则挤掉按钮 */
+/* 大图不用 pixelated：显示尺寸与源图不是整数倍，硬采样会让像素块大小不均，平滑反而更好看 */
+.endart{display:block;max-width:min(340px,74vw);max-height:46vh;
+  border:4px solid #6b4f2a;box-shadow:0 3px 0 rgba(0,0,0,.35)}
+.endart.hidden{display:none}
 .units-tip{display:flex;flex-wrap:wrap;gap:5px 14px;justify-content:center;font-size:12px;color:#e6efff;max-width:560px}
 /* 音量滑块面板：吊在顶栏音量按钮下方 */
 #volPanel{position:absolute;top:calc(100% + 4px);right:0;display:flex;align-items:center;gap:7px;

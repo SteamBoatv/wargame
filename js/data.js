@@ -51,14 +51,14 @@ const MECH_META={
 /* ---------------- 指挥官 ---------------- */
 const COMMANDERS={
   marshal:{
-    icon:'⚖️',name:'王国元帅',
+    icon:'⚖️',art:'assets/art/cmdr_marshal.png',name:'王国元帅',
     desc:'均衡之道：五兵种克制环 · 挖矿经济 · 空降守备队',
     income:8,killMult:0.35,mining:true,
     roster:{1:['sword','spear','archer','shield','monk'],2:['sword2','spear2','archer2','shield2','monk2']},
     place:['airdrop'],
   },
   engineer:{
-    icon:'🏗️',name:'机械军团',
+    icon:'🏗️',art:'assets/art/cmdr_engineer.png',name:'机械军团',
     desc:'钢铁阵地：路障锁路 · 激光塔火力 · 前线反应堆经济（越靠前产量越高）· 机械化部队',
     income:6,killMult:0.3,mining:false,
     roster:{1:['militia','crossbow','ram'],2:['militia2','crossbow2','ram2']},

@@ -161,7 +161,7 @@ async function netOpen(code,role){
       else if(mt.k==='end'&&fromId===NET.hostId){
         /* 结算方按当前视角归位，否则翻转视角后会宣告错误的一方获胜 */
         const w=NET.specMirror?1-(mt.winner|0):(mt.winner|0);
-        netSpecEnd(mt.r?('对局结束（'+mt.r+'）'):(w===0?'🔵 蓝方获胜':'🔴 红方获胜'));
+        netSpecEnd(mt.r?('对局结束（'+mt.r+'）'):(w===0?'🔵 蓝方获胜':'🔴 红方获胜'),mt.r?null:true);
       }
       return;
     }
@@ -350,8 +350,9 @@ function specFlipView(){
   toast('🔄 已切换到'+(NET.specMirror?'红方':'蓝方')+'视角');
   sClick();
 }
-function netSpecEnd(txt){
+function netSpecEnd(txt,art){
   if(G)G.over=1;
+  setEndArt('goArt',art===undefined?null:art); /* 观战没有立场：分出胜负才配图，掉线中断不配 */
   $('goTitle').textContent='👁️ '+(txt||'对局结束');
   $('btnAgain').style.display='none';
   $('gameover').classList.remove('hidden');
@@ -723,6 +724,7 @@ function netShowEnd(won,reason){
   $('spdAsk').classList.add('hidden');
   if(NET){NET.started=false;NET.lastStart=null;} /* 掉线结束这条路径不会广播 end，也要就地清理 */
   if(G)G.over=won?1:-1;
+  setEndArt('goArt',won);
   $('goTitle').textContent=(won?'🎉 胜利！':'💀 战败…')+(reason?'（'+reason+'）':'');
   $('btnAgain').style.display='none';
   $('gameover').classList.remove('hidden');

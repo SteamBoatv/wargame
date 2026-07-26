@@ -458,6 +458,7 @@ function showReward(title,poolMode){
 function showRunEnd(win){
   mode='map';
   $('mapov').classList.add('hidden');
+  setEndArt('runArt',win);
   $('runTitle').textContent=win?'👑 远征成功！魔王要塞已陷落':'💀 远征失败于第 '+(RUN.layer+1)+' 层';
   $('runDesc').textContent='本次收集强化：'+
     (RUN.perks.length?RUN.perks.map(id=>{const p=perkById(id);return p?p.icon:'';}).join(' '):'无');
@@ -509,6 +510,17 @@ $('btnPvpCancel').addEventListener('pointerdown',e=>{
 });
 /* ---------------- 指挥官选择（菜单+PvP大厅共用） ---------------- */
 let selCmdr='marshal';
+function cmdrEmoji(c){
+  const sp=document.createElement('span');sp.className='pic';sp.textContent=c.icon;return sp;
+}
+/* 结算插图：win=true 胜利图 / false 战败图 / null 不显示（观战、掉线等无胜负立场时） */
+function setEndArt(id,win){
+  const im=$(id);if(!im)return;
+  if(win===null||win===undefined){im.classList.add('hidden');return;}
+  im.onerror=()=>im.classList.add('hidden');
+  im.src='assets/art/'+(win?'art_win.png':'art_lose.png');
+  im.classList.remove('hidden');
+}
 function buildCmdrPick(elId){
   const el=$(elId);
   if(!el)return;
@@ -518,7 +530,15 @@ function buildCmdrPick(elId){
     const b=document.createElement('button');
     b.className='obtn cmbtn'+(selCmdr===key?' sel':'');
     b.type='button';
-    b.innerHTML='<span class="pic">'+c.icon+'</span><b>'+c.name+'</b><small>'+c.desc+'</small>';
+    if(c.art){
+      const im=document.createElement('img');
+      im.className='pic art';im.src=c.art;im.alt='';im.draggable=false;
+      im.addEventListener('error',()=>im.replaceWith(cmdrEmoji(c))); /* 立绘缺失时退回 emoji */
+      b.appendChild(im);
+    }else b.appendChild(cmdrEmoji(c));
+    const nm=document.createElement('b');nm.textContent=c.name;
+    const ds=document.createElement('small');ds.textContent=c.desc;
+    b.appendChild(nm);b.appendChild(ds);
     if(elId==='pvpCmdrPick'&&typeof NET!=='undefined'&&NET&&NET.myLocked)b.disabled=true;
     b.addEventListener('pointerdown',e=>{
       e.preventDefault();

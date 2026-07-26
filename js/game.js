@@ -164,6 +164,7 @@ function endGame(r){
         showRunEnd(false);
       }
     }else{
+      setEndArt('goArt',r>0);
       $('goTitle').textContent=r>0?'🎉 胜利！':'💀 战败…';
       $('gameover').classList.remove('hidden');
     }
