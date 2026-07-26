@@ -151,15 +151,8 @@ function buildUnitButtons(){
     const tb=document.createElement('button');
     tb.className='ub dark'; tb.id='btn-place-'+pt; tb.type='button';
     tb.title=P.name+(P.road?'：建在道路上':'：任意位置')+'，冷却 '+P.cd+' 秒'+(P.maxAlive?('，同时最多 '+P.maxAlive+' 座'):'');
-    if(pt==='turret'){
-      tb.innerHTML='<canvas class="be bi" width="32" height="32"></canvas><span class="bn">重炮</span><span class="bc" id="pc-turret">💰'+P.cost+'</span>';
-      const tc=tb.querySelector('canvas').getContext('2d');
-      tc.fillStyle='#05070a'; tc.fillRect(13,2,6,16);
-      tc.fillStyle='#191c24'; tc.beginPath(); tc.arc(16,20,10,0,Math.PI*2); tc.fill();
-      tc.fillStyle='#2c313d'; tc.beginPath(); tc.arc(16,20,6.5,0,Math.PI*2); tc.fill();
-    }else{
-      tb.innerHTML='<span class="be">'+P.emoji+'</span><span class="bn">'+P.name+'</span><span class="bc" id="pc-'+pt+'">💰'+P.cost+'</span>';
-    }
+    if(P.strike)tb.title=P.name+'：任意位置圈定圆形区域，'+STRIKE.waves+' 轮炮击（每轮间隔 '+STRIKE.gap+' 秒），只伤单位与建筑，冷却 '+P.cd+' 秒';
+    tb.innerHTML='<span class="be">'+P.emoji+'</span><span class="bn">'+P.name+'</span><span class="bc" id="pc-'+pt+'">💰'+P.cost+'</span>';
     tb.addEventListener('pointerdown',e=>{e.preventDefault();togglePlace(pt);});
     bar.appendChild(tb);
   }
@@ -246,7 +239,7 @@ const PERKS=[
   {id:'eco', icon:'💰',name:'金矿股份',desc:'基础收入 +3/秒',apply:m=>m.income+=3},
   {id:'spd', icon:'💨',name:'行军号角',desc:'全军移速 +12%',apply:m=>m.speed*=1.12},
   {id:'bld', icon:'⏱️',name:'征兵官',  desc:'生产速度 +25%',apply:m=>m.build*=1.25},
-  {id:'tur', icon:'🛢️',name:'军械学院',desc:'部署技冷却 -35%、重炮伤害 +30%',apply:m=>{m.turCd*=0.65;m.turDmg*=1.3;}},
+  {id:'tur', icon:'🛢️',name:'军械学院',desc:'部署技冷却 -35%、火力覆盖伤害 +30%',apply:m=>{m.turCd*=0.65;m.turDmg*=1.3;}},
   {id:'crit',icon:'🎯',name:'致命打击',desc:'暴击率 +8%',apply:m=>m.critAdd+=0.08},
   {id:'heal',icon:'✚', name:'圣光祝福',desc:'修士治疗 +50%',apply:m=>m.heal*=1.5},
   {id:'xp',  icon:'📜',name:'古代典籍',desc:'每战开局自带 50% 进化经验',apply:m=>m.xp0=Math.min(1,m.xp0+0.5)},
@@ -566,7 +559,7 @@ buildCmdrPick('pvpCmdrPick');
 })();
 $('btnEmote').addEventListener('pointerdown',e=>{
   e.preventDefault();
-  $('emoteBar').classList.toggle('hidden');
+  setEmoteBar($('emoteBar').classList.contains('hidden'));
 });
 $('btnSpecFlip').addEventListener('pointerdown',e=>{e.preventDefault();specFlipView();});
 /* 观众的兜底出口：不依赖房主的任何消息也能自行离开 */

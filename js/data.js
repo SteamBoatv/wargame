@@ -62,16 +62,22 @@ const COMMANDERS={
     desc:'钢铁阵地：路障锁路 · 激光塔火力 · 前线反应堆经济（越靠前产量越高）· 机械化部队',
     income:6,killMult:0.3,mining:false,
     roster:{1:['militia','crossbow','ram'],2:['militia2','crossbow2','ram2']},
-    place:['barricade','tower','workshop','turret'],
+    place:['barricade','tower','workshop','strike'],
   },
 };
 function cmdrOf(side){
   const k=side?(G&&G.cmdr1)||'marshal':(G&&G.cmdr0)||'marshal';
   return COMMANDERS[k]||COMMANDERS.marshal;
 }
-/* 可放置物（turret=限时重炮，其余为建筑实体） */
+/* 火力覆盖（机械军团技能）：圈定圆形区域，导弹分 waves 轮落下，每轮间隔 gap 秒。
+   只伤单位与建筑，打不到城堡——否则会退化成"隔空拆家"的必胜手段。
+   轮次间隔比行军速度长：站着打的战线会被三轮全吃，行军中的部队能走出去，这是它的博弈点。
+   （必须定义在 PLACEABLES 之前——下面直接引用了 STRIKE.cost/cd） */
+const STRIKE={cost:260,cd:50,radius:118,waves:3,gap:5,shells:7,shellGap:0.16,
+              lead:1.3,dmg:38,splash:62,shellSp:620,lobDist:520};
+/* 可放置物（strike=区域炮击，airdrop=限时部队，其余为建筑实体） */
 const PLACEABLES={
-  turret:{icon:null,emoji:'🛢',name:'重炮',cost:250,cd:45,road:false},
+  strike:{emoji:'🎯',name:'火力覆盖',cost:STRIKE.cost,cd:STRIKE.cd,road:false,strike:true},
   airdrop:{emoji:'🪂',name:'空降',cost:250,cd:50,road:true,drop:true,life:25},
   barricade:{emoji:'🚧',name:'路障',cost:120,cd:20,road:true,maxAlive:2,unit:'b_barricade'},
   tower:{emoji:'🗼',name:'激光塔',cost:220,cd:35,road:true,maxAlive:2,unit:'b_tower'},
@@ -83,7 +89,15 @@ function wsYield(u){ /* 工坊产量：越靠近敌方越高 2~6/秒 */
 }
 const BASE_HP=900, KILL_REWARD=0.35, QUEUE_MAX=5, INCOME_STEP=3, INCOME_MAX_LVL=10;
 const EVOLVE_XP=300, EVOLVE_COST=500, FLAG_INCOME=3, FLAG_RANGE=90, FLAG_TIME=3;
-const TURRET={cost:250,cd:45,life:25,range:260,dmg:35,splash:55,turn:1.6,fireCd:2.2,shellSp:300};
+/* 老兵晋升：按累计击杀升阶。晋升"不回血"——只是获得自动再生的能力；
+   同时最大生命上限提高，所以血条比例会立刻变低，再靠再生慢慢补满。
+   aura=地面光环粗细，blur=精灵外发光（贵，只给稀有的高军衔用，见 render.js drawUnit） */
+const VET_RANKS=[null,
+  {kills:3,tag:'⭐',name:'老兵',dmg:1.30,hp:1.22,regen:0.020,scale:1.07,glow:'#ffd76a',aura:3.2,blur:0},
+  {kills:8,tag:'🔥',name:'精锐',dmg:1.62,hp:1.50,regen:0.034,scale:1.15,glow:'#ff7a34',aura:3.2,blur:7},
+];
+const VET_MAX=VET_RANKS.length-1;
+const EMOTE_CD=4.5;   /* 秒，表情发送冷却 */
 const incomeCost=lvl=>Math.round(100*Math.pow(1.5,lvl));
 const DIFFS={easy:{mult:0.8},normal:{mult:1.0},hard:{mult:1.22}};
 /* ---------------- 天气 ---------------- */

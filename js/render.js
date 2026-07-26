@@ -161,6 +161,7 @@ function drawMechUnit(u,p,st,dir){
 function drawUnit(u,p){
   const st=UNITS[u.type], dir=u.side?-1:1;
   if(st.cls==='bldg'){drawBuilding(u,p,st);return;}
+  const vr=u.vet?VET_RANKS[u.vet]:null;
   ctx.fillStyle='rgba(0,0,0,.2)';
   ctx.beginPath(); ctx.ellipse(p.x,p.y+3,13,5,0,0,TAU); ctx.fill();
   ctx.strokeStyle=u.side?'rgba(255,64,64,.75)':'rgba(46,125,255,.75)';
@@ -171,8 +172,24 @@ function drawUnit(u,p){
     ctx.lineWidth=1.5;
     ctx.beginPath(); ctx.ellipse(p.x,p.y+3,16,6.5,0,0,TAU); ctx.stroke();
   }
+  if(vr){
+    /* 老兵脚下加一圈呼吸光环：即使精灵本身被挡住也能一眼认出场上的老兵 */
+    const pl=0.75+0.25*Math.sin((G?G.t:0)*3.4+u.off);
+    ctx.strokeStyle=vr.glow;
+    ctx.globalAlpha=0.9*pl;
+    ctx.lineWidth=vr.aura;
+    ctx.beginPath(); ctx.ellipse(p.x,p.y+3,19,7.5,0,0,TAU); ctx.stroke();
+    ctx.globalAlpha=1;
+  }
   ctx.save();
   ctx.translate(p.x+p.tx*dir*u.lunge*10, p.y+p.ty*dir*u.lunge*10);
+  if(vr){
+    ctx.scale(vr.scale,vr.scale);       /* 体型随军衔变大 */
+    if(vr.blur){                        /* 精灵外发光＝描边效果，一次 drawImage 搞定 */
+      ctx.shadowColor=vr.glow;          /* 但 shadowBlur 每次都要开离屏图层做高斯模糊，很贵， */
+      ctx.shadowBlur=vr.blur;           /* 所以只给数量少的高军衔用；低军衔靠地面光环+体型区分 */
+    }
+  }
   if(u.dying){
     const k=Math.min(1,u.dying/0.45);
     ctx.globalAlpha=1-k;
@@ -234,46 +251,48 @@ function drawUnit(u,p){
     ctx.fillRect(p.x-w/2-1,p.y-by,w+2,h+2);
     ctx.fillStyle=u.side?'#ff5a5a':'#43d675';
     ctx.fillRect(p.x-w/2,p.y-by+1,w*r,h);
-    if(u.star){
+    if(vr){
       ctx.font=em(13);
       ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText('⭐',p.x+22,p.y-by-1);
+      ctx.fillText(vr.tag,p.x+22,p.y-by-1);
     }
   }
 }
-function drawTurretBody(x,y,ang,flash){
+/* 打击区域标记：地面贴花，画在所有单位之下。
+   敌方呼叫的用红色警戒色，自己呼叫的用青色，让"该跑了"和"打得好"一眼可分 */
+function drawStrikeZone(k){
+  const foe=k.side!==0, t=G?G.t:0, inWave=k.pend>0;
+  const pulse=0.5+0.5*Math.sin(t*6);
   ctx.save();
-  ctx.translate(x,y);
-  ctx.fillStyle='rgba(0,0,0,.3)';
-  ctx.beginPath(); ctx.ellipse(0,5,24,10,0,0,TAU); ctx.fill();
-  ctx.fillStyle='#191c24';
-  ctx.beginPath(); ctx.arc(0,0,21,0,TAU); ctx.fill();
-  ctx.fillStyle='#2c313d';
-  ctx.beginPath(); ctx.arc(0,0,16,0,TAU); ctx.fill();
-  ctx.fillStyle='#0d0f14';
-  for(let i=0;i<6;i++){
-    const a=i/6*TAU;
-    ctx.beginPath(); ctx.arc(Math.cos(a)*18.5,Math.sin(a)*18.5,2,0,TAU); ctx.fill();
-  }
-  ctx.rotate(ang);
-  const rec=flash*5;
-  ctx.fillStyle='#14161c'; ctx.fillRect(6-rec,-6,26,12);
-  ctx.fillStyle='#3a3f4d'; ctx.fillRect(6-rec,-6,26,3);
-  ctx.fillStyle='#05070a'; ctx.fillRect(28-rec,-7,7,14);
-  if(flash>0.5){
-    ctx.fillStyle='rgba(255,220,120,'+(flash-0.5).toFixed(2)+')';
-    ctx.beginPath(); ctx.arc(38-rec,0,10*flash,0,TAU); ctx.fill();
-  }
+  ctx.globalAlpha=inWave?0.30:0.14+0.14*pulse;
+  ctx.fillStyle=foe?'#ff3b30':'#33d6ff';
+  ctx.beginPath(); ctx.arc(k.x,k.y,k.r,0,TAU); ctx.fill();
+  ctx.globalAlpha=1;
+  ctx.strokeStyle=foe?'rgba(255,70,60,.95)':'rgba(80,220,255,.95)';
+  ctx.lineWidth=3;
+  ctx.setLineDash([10,8]); ctx.lineDashOffset=-t*26;
+  ctx.beginPath(); ctx.arc(k.x,k.y,k.r,0,TAU); ctx.stroke();
+  ctx.setLineDash([]); ctx.lineDashOffset=0;
+  /* 外环＝落点圈再加一个溅射半径，即真正可能被波及的最外沿（越靠外命中率越低） */
+  ctx.globalAlpha=0.35; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.arc(k.x,k.y,k.r+STRIKE.splash,0,TAU); ctx.stroke();
+  ctx.globalAlpha=1;
+  ctx.lineWidth=2;
+  const cr=k.r*0.24;
+  ctx.beginPath();
+  ctx.moveTo(k.x-cr,k.y); ctx.lineTo(k.x+cr,k.y);
+  ctx.moveTo(k.x,k.y-cr); ctx.lineTo(k.x,k.y+cr);
+  ctx.stroke();
+  ctx.fillStyle='rgba(10,14,22,.72)';
+  rrectPath(k.x-40,k.y-k.r-27,80,21,6); ctx.fill();
+  ctx.fillStyle=foe?'#ffb0a6':'#bdefff';
+  ctx.font='bold 13px sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(inWave?('💥 第 '+k.wave+' 轮')
+              :k.wave>=STRIKE.waves?'💥 打击结束'
+              :('🎯 '+Math.max(0,Math.ceil(k.waveT))+'s · 余 '+(STRIKE.waves-k.wave)+' 轮'),
+               k.x,k.y-k.r-16);
   ctx.restore();
-}
-function drawTurret(t){
-  ctx.strokeStyle='rgba(25,28,36,0.22)'; ctx.lineWidth=2; ctx.setLineDash([5,9]);
-  ctx.beginPath(); ctx.arc(t.x,t.y,TURRET.range,0,TAU); ctx.stroke();
-  ctx.setLineDash([]);
-  drawTurretBody(t.x,t.y,t.ang,t.flash);
-  const r=clamp(t.life/TURRET.life,0,1);
-  ctx.strokeStyle='rgba(255,255,255,0.75)'; ctx.lineWidth=3;
-  ctx.beginPath(); ctx.arc(t.x,t.y,25,-Math.PI/2,-Math.PI/2+TAU*r); ctx.stroke();
 }
 function drawFlag(f){
   const p=pathPos(f.s);
@@ -299,6 +318,29 @@ function drawProj(p){
     ctx.fillStyle='#14161c';
     ctx.beginPath(); ctx.arc(0,0,6,0,TAU); ctx.fill();
     ctx.strokeStyle='#4a5060'; ctx.lineWidth=2; ctx.stroke();
+    ctx.restore();
+    return;
+  }
+  /* 火力覆盖的落下导弹：拖一条尾焰，弹头用机械阵营的 proj_b 图 */
+  if(p.kind==='mortar'){
+    ctx.strokeStyle=p.side?'rgba(255,150,110,.35)':'rgba(255,205,130,.35)';
+    ctx.lineWidth=5; ctx.lineCap='round';
+    ctx.beginPath();
+    ctx.moveTo(0,0);
+    ctx.lineTo(-Math.cos(p.ang)*56,-Math.sin(p.ang)*56);
+    ctx.stroke();
+    ctx.lineCap='butt';
+    ctx.rotate(p.ang);
+    const MM=ASSETS.mech&&ASSETS.mech[p.side?'red':'blue'], img=MM&&MM.proj_b;
+    if(img){
+      const cell=img.height, n=Math.round(img.width/cell);
+      const fi=Math.floor((G?G.t:0)*16)%n;
+      const dw=26;
+      ctx.drawImage(img,fi*cell,0,cell,cell,-dw/2,-dw/2,dw,dw);
+    }else{
+      ctx.fillStyle=p.side?'#ffb27a':'#a8e6ff';
+      ctx.fillRect(-11,-3,22,6);
+    }
     ctx.restore();
     return;
   }
@@ -473,29 +515,34 @@ function draw(){
     const fp=pathPos(f.s);
     if(fp.x>vx0&&fp.x<vx1&&fp.y>vy0&&fp.y<vy1)spr.push({y:fp.y,k:3,o:f,p:null});
   }
-  if(G)for(const t of G.turrets){
-    if(t.x>vx0&&t.x<vx1&&t.y>vy0&&t.y<vy1)spr.push({y:t.y,k:4,o:t,p:null});
-  }
   if(G)for(const u of G.units){
     const p=unitPos(u);
     if(p.x>vx0&&p.x<vx1&&p.y>vy0&&p.y<vy1)spr.push({y:p.y,k:2,o:u,p});
   }
   spr.sort((a,b)=>a.y-b.y);
+  if(G&&G.strikes)for(const k of G.strikes)drawStrikeZone(k); /* 地面贴花，必须在单位之前画 */
   for(const s of spr){
     if(s.k===0)drawDeco(s.o);
     else if(s.k===1)drawBase(s.o);
     else if(s.k===3)drawFlag(s.o);
-    else if(s.k===4)drawTurret(s.o);
     else drawUnit(s.o,s.p);
   }
   if(placing&&placePos&&G&&mode==='play'){
-    if(placingType==='turret'){
-      ctx.globalAlpha=0.55;
-      drawTurretBody(placePos.x,placePos.y,-Math.PI/2,0);
+    if(placingType==='strike'){
+      const ok=strikeInBounds(placePos.x,placePos.y);
+      ctx.globalAlpha=0.22;
+      ctx.fillStyle=ok?'#33d6ff':'#ff5a5a';
+      ctx.beginPath(); ctx.arc(placePos.x,placePos.y,STRIKE.radius,0,TAU); ctx.fill();
       ctx.globalAlpha=1;
-      ctx.strokeStyle='rgba(255,255,255,0.55)'; ctx.lineWidth=2; ctx.setLineDash([8,8]);
-      ctx.beginPath(); ctx.arc(placePos.x,placePos.y,TURRET.range,0,TAU); ctx.stroke();
+      ctx.strokeStyle=ok?'rgba(80,220,255,.95)':'rgba(255,90,90,.95)';
+      ctx.lineWidth=3; ctx.setLineDash([10,8]);
+      ctx.beginPath(); ctx.arc(placePos.x,placePos.y,STRIKE.radius,0,TAU); ctx.stroke();
       ctx.setLineDash([]);
+      ctx.lineWidth=2;
+      ctx.beginPath();
+      ctx.moveTo(placePos.x-30,placePos.y); ctx.lineTo(placePos.x+30,placePos.y);
+      ctx.moveTo(placePos.x,placePos.y-30); ctx.lineTo(placePos.x,placePos.y+30);
+      ctx.stroke();
     }else{
       /* 建筑虚影：吸附到道路中心，绿=可建 红=不可建 */
       const P=PLACEABLES[placingType];
@@ -535,26 +582,7 @@ function draw(){
       }
     }
     for(const f of G.floats)drawFloat(f);
-    /* PvP 表情气泡（世界坐标，城堡旁弹出） */
-    if(G.emotes){
-      for(const eb of G.emotes)eb.t+=1/60;
-      G.emotes=G.emotes.filter(x=>x.t<2.6);
-      for(const eb of G.emotes){
-        const k=eb.t<0.22?eb.t/0.22:1;
-        const a=eb.t>2.1?Math.max(0,(2.6-eb.t)/0.5):1;
-        const y=eb.y-eb.t*10;
-        ctx.globalAlpha=a;
-        ctx.fillStyle='#fdf6e3';
-        ctx.strokeStyle='#a97f4b';
-        ctx.lineWidth=3;
-        rrectPath(eb.x-26*k,y-26*k,52*k,52*k,10*k);
-        ctx.fill();ctx.stroke();
-        ctx.font=em(34*k);
-        ctx.textAlign='center';ctx.textBaseline='middle';
-        ctx.fillText(eb.e,eb.x,y+2);
-      }
-      ctx.globalAlpha=1;
-    }
+    /* 表情不再画在世界坐标里——改为屏幕左侧的 DOM 气泡流，见 net.js showEmote */
   }
   ctx.setTransform(dpr,0,0,dpr,0,0);
   if(G)drawWeather();

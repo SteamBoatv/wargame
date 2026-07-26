@@ -23,7 +23,7 @@ function newGame(stage){
      baseHp:[BASE_HP,BASE_HP],
      units:[],projs:[],floats:[],queue:[],aiQueue:[],shake:0,spawnCnt:[0,0],
      flags:CUR_DEF.flags.map(fs=>({s:fs*L,owner:-1,prog:0})),
-     turrets:[],pcds:{turret:[0,0],airdrop:[0,0],barricade:[0,0],tower:[0,0],workshop:[0,0]},booms:[],
+     strikes:[],pcds:{strike:[0,0],airdrop:[0,0],barricade:[0,0],tower:[0,0],workshop:[0,0]},booms:[],
      streakN:0,streakT:-9,lastWarn:-9,banner:null,flash:0};
   if(RUN)RUN.goldCarry=0;
   placing=false; placePos=null;
@@ -47,7 +47,7 @@ function spawnUnit(side,type){
   const hpMul=side?(G.stage?G.stage.hpMul:1):(RUN?RUN.mods.hp:1)*famMod(type,'hp');
   const hp=Math.round(st.hp*hpMul);
   G.units.push({uid:(G.uidSeq=(G.uidSeq||0)+1),side,type,s:side?L-70:70,off,hp,max:hp,
-    cd:rand(0.1,0.4),walk:rand(0,6),lunge:0,dying:0,moving:false,kills:0,star:false,
+    cd:rand(0.1,0.4),walk:rand(0,6),lunge:0,dying:0,moving:false,kills:0,vet:0,
     atkT:9,animT:rand(0,9)});
   sSpawn();
 }
@@ -87,14 +87,31 @@ function damage(e,dmg,bySide,attacker){
     }
     if(attacker&&!attacker.dying){
       attacker.kills++;
-      if(attacker.kills>=3&&!attacker.star){
-        attacker.star=true;
-        attacker.hp=Math.min(attacker.max,attacker.hp+attacker.max*0.3);
-        const ap=unitPos(attacker);
-        addFloat(ap.x,ap.y-58,'⭐老兵!','#ffd76a',15);
-      }
+      promoteVet(attacker);
     }
     sDie();
+  }
+}
+/* 老兵晋升：够击杀数就升阶。刻意"只抬上限、不补当前血"——
+   晋升瞬间血条比例反而下降，全靠新获得的再生能力慢慢填回去 */
+function promoteVet(u){
+  const cur=u.vet||0;
+  if(cur>=VET_MAX)return;
+  if(UNITS[u.type].cls==='bldg')return;   /* 建筑不升军衔：drawBuilding 走的另一条分支，加了也看不见 */
+  const nx=VET_RANKS[cur+1];
+  if(u.kills<nx.kills)return;
+  u.vet=cur+1;
+  u.max=Math.round(u.max*nx.hp/(cur?VET_RANKS[cur].hp:1)); /* 按档位比例递增，不重算基础血量 */
+  const p=unitPos(u);
+  addFloat(p.x,p.y-58,nx.tag+nx.name+'!',nx.glow,16);
+  /* 混战里晋升会扎堆，节流一下免得音效糊成一片 */
+  if(u.side===0&&G.t-(G._vetSfx||-9)>0.8){G._vetSfx=G.t;sFlag();}
+}
+/* 老兵自动回血：只有晋升后才有，主机权威（客机血量走快照） */
+function updateVets(dt){
+  for(const u of G.units){
+    if(!u.vet||u.dying||u.hp>=u.max)continue;
+    u.hp=Math.min(u.max,u.hp+u.max*VET_RANKS[u.vet].regen*dt);
   }
 }
 /* 克制/暴击/老兵伤害结算 */
@@ -104,7 +121,7 @@ function rollDmg(st,def,attacker,side){
   const critP=side===0?0.1+(RUN?RUN.mods.critAdd:0):0.1;
   const crit=Math.random()<critP;
   let dmg=st.dmg*m*(crit?2:1);
-  if(attacker&&attacker.star)dmg*=1.3;
+  if(attacker&&attacker.vet)dmg*=VET_RANKS[attacker.vet].dmg;
   dmg*=side===1?(G.stage?G.stage.dmgMul:1):(RUN?RUN.mods.dmg:1);
   if(side===0&&attacker&&attacker.type)dmg*=famMod(attacker.type,'dmg');
   return {dmg,counter:m>1,crit};
@@ -315,7 +332,8 @@ function updateProjs(dt){
           if(Math.hypot(ep.x-p.tx,ep.y-p.ty)<=p.wsplash)applyDamage(e,rollDmg(p,e,null,p.side),p.side,null);
         }
         G.booms.push({x:p.tx,y:p.ty,t:0});
-        sBoom();
+        /* 一轮齐射 7 发会在 1 秒内连炸，全放会糊成噪音——节流后仍听得出是弹幕 */
+        if(G.t-(G._boomSfx||-9)>0.22){G._boomSfx=G.t;sBoom();}
         G.shake=Math.max(G.shake,0.1);
       }else if(p.splash){
         const cs=p.tgt?p.tgt.s:(p.side?55:L-55);
@@ -429,7 +447,8 @@ function update(dt){
   updateUnits(dt);
   updateProjs(dt);
   updateFlags(dt);
-  updateTurrets(dt);
+  updateStrikes(dt);
+  updateVets(dt);
   for(const k in G.pcds){
     G.pcds[k][0]=Math.max(0,G.pcds[k][0]-dt);
     G.pcds[k][1]=Math.max(0,G.pcds[k][1]-dt);
@@ -546,16 +565,17 @@ function updatePiles(dt){
   }
 }
 
-/* ---------------- 放置系统（重炮 + 工程师建筑：拒马/箭塔/工坊） ---------------- */
-let placing=false, placePos=null, placingType='turret';
+/* ---------------- 放置系统（火力覆盖 + 工程师建筑：拒马/箭塔/工坊） ---------------- */
+let placing=false, placePos=null, placingType='strike';
 function togglePlace(ty){
   if(!G||mode!=='play'||paused||G.over||G.spectator)return;
-  ty=ty||'turret';
+  ty=ty||'strike';
   if(placing&&placingType===ty){placing=false;placePos=null;toast('已取消部署');return;}
   const P=PLACEABLES[ty];
   if(G.pcds[ty][0]>0||G.money<P.cost)return;
   placing=true; placingType=ty; placePos=null;
-  toast('🎯 按住拖动选位，松手部署'+P.name+(P.road?'（必须建在道路上）':'')+'，再点按钮取消');
+  toast(P.strike?('🎯 按住拖动圈定打击区域，松手呼叫火力，再点按钮取消')
+                :('🎯 按住拖动选位，松手部署'+P.name+(P.road?'（必须建在道路上）':'')+'，再点按钮取消'));
   sClick();
 }
 function nearestPath(x,y){
@@ -584,7 +604,7 @@ function buildingPlaceCore(side,ty,s,localToast){
   G.pcds[ty][side]=P.cd*(side?1:(RUN?RUN.mods.turCd:1));
   G.units.push({uid:(G.uidSeq=(G.uidSeq||0)+1),side,type:ut,s,off:0,
     hp:st.hp,max:st.hp,cd:rand(0.3,0.8),walk:0,lunge:0,dying:0,moving:false,
-    kills:0,star:false,atkT:9,animT:0});
+    kills:0,vet:0,atkT:9,animT:0});
   if(localToast)toast('🔨 '+P.name+'建造完成'+(ty==='workshop'?'（此位置产量 +'+Math.round(wsYield({side,s}))+'/秒）':''));
   sBoom();
 }
@@ -607,7 +627,7 @@ function airdropCore(side,s){
       s:clamp(s+(i-1)*26*(side?1:-1),20,L-20),
       off:LANE_SLOTS[i%LANE_SLOTS.length]+rand(-4,4),
       hp,max:hp,cd:rand(0.1,0.3),walk:rand(0,6),lunge:0,dying:0,moving:false,
-      kills:0,star:false,atkT:9,animT:rand(0,9),hold:true,expireT:P.life});
+      kills:0,vet:0,atkT:9,animT:rand(0,9),hold:true,expireT:P.life});
   });
   const p=pathPos(s);
   addFloat(p.x,p.y-50,'🪂 空降!','#ffd76a',20);
@@ -646,57 +666,69 @@ function placeAt(wx,wy){
     return;
   }
   if(G.pvp&&NET&&!NET.isHost){
-    if(G.money<TURRET.cost||G.pcds.turret[0]>0)return;
-    if(wx<30||wx>WORLD_W-30||wy<30||wy>WORLD_H-30){toast('⚠️ 超出战场边界');return;}
-    if(Math.hypot(wx-BASE1.x,wy-BASE1.y)<200){toast('⚠️ 离敌方城堡太近');return;}
-    NET.sendCmd({a:'p',t:'turret',x:Math.round(WORLD_W-wx),y:Math.round(WORLD_H-wy)});
-    toast('🛡 部署指令已发送');
+    if(G.money<STRIKE.cost||G.pcds.strike[0]>0)return;
+    if(!strikeInBounds(wx,wy)){toast('⚠️ 超出战场边界');return;}
+    NET.sendCmd({a:'p',t:'strike',x:Math.round(WORLD_W-wx),y:Math.round(WORLD_H-wy)});
+    toast('🎯 打击坐标已发送');
     return;
   }
-  turretPlaceCore(0,wx,wy,true);
+  strikeCore(0,wx,wy,true);
 }
-function turretPlaceCore(side,wx,wy,localToast){
+function strikeInBounds(wx,wy){
+  return wx>=30&&wx<=WORLD_W-30&&wy>=30&&wy<=WORLD_H-30;
+}
+/* 火力覆盖：在目标圆区呼叫 STRIKE.waves 轮炮击。
+   lead 秒的预警窗口是有意的——被打的一方看得见红圈，来得及把部队挪开 */
+function strikeCore(side,wx,wy,localToast){
   const money=side?G.aiMoney:G.money;
-  if(money<TURRET.cost||G.pcds.turret[side]>0)return;
-  if(wx<30||wx>WORLD_W-30||wy<30||wy>WORLD_H-30){if(localToast)toast('⚠️ 超出战场边界');return;}
-  const eb=side?BASE0:BASE1;
-  if(Math.hypot(wx-eb.x,wy-eb.y)<200){if(localToast)toast('⚠️ 离敌方城堡太近');return;}
-  if(side)G.aiMoney-=TURRET.cost; else G.money-=TURRET.cost;
-  G.pcds.turret[side]=TURRET.cd*(side?1:(RUN?RUN.mods.turCd:1));
-  G.turrets.push({side,x:wx,y:wy,ang:side?Math.PI/2:-Math.PI/2,cd:0.8,life:TURRET.life,flash:0});
-  if(localToast)toast('🛡 重炮部署完成，持续 '+TURRET.life+' 秒');
-  sBoom();
+  if(money<STRIKE.cost||G.pcds.strike[side]>0)return;
+  if(!strikeInBounds(wx,wy)){if(localToast)toast('⚠️ 超出战场边界');return;}
+  if(side)G.aiMoney-=STRIKE.cost; else G.money-=STRIKE.cost;
+  G.pcds.strike[side]=STRIKE.cd*(side?1:(RUN?RUN.mods.turCd:1));
+  G.strikes.push({side,x:wx,y:wy,r:STRIKE.radius,wave:0,pend:0,shellT:0,waveT:STRIKE.lead,lingerT:0});
+  if(localToast)toast('🎯 火力覆盖已呼叫：'+STRIKE.waves+' 轮，每轮间隔 '+STRIKE.gap+' 秒');
+  addFloat(wx,wy-30,'🎯 坐标已锁定','#ff9040',18);
+  sFlag();
 }
-function updateTurrets(dt){
-  for(const t of G.turrets){
-    t.life-=dt;
-    t.cd-=dt;
-    t.flash=Math.max(0,t.flash-dt*3);
-    let best=null,bd=1e9,bp=null;
-    for(const u of G.units){
-      if(u.side===(t.side||0)||u.dying)continue;
-      const p=unitPos(u);
-      const d=Math.hypot(p.x-t.x,p.y-t.y);
-      if(d<bd){bd=d;best=u;bp=p;}
-    }
-    if(best&&bd<=TURRET.range){
-      const want=Math.atan2(bp.y-t.y,bp.x-t.x);
-      let diff=want-t.ang;
-      while(diff>Math.PI)diff-=TAU;
-      while(diff<-Math.PI)diff+=TAU;
-      const mx=TURRET.turn*dt;
-      t.ang+=clamp(diff,-mx,mx);
-      if(Math.abs(diff)<0.12&&t.cd<=0){
-        t.cd=TURRET.fireCd; t.flash=1;
-        G.projs.push({kind:'shell',side:t.side||0,x:t.x+Math.cos(t.ang)*30,y:t.y+Math.sin(t.ang)*30,
-          tx:bp.x,ty:bp.y,tgt:best,dmg:TURRET.dmg*(((t.side||0)===0&&RUN)?RUN.mods.turDmg:1),cls:'siege',shooter:null,
-          splash:0,wsplash:TURRET.splash,sp:TURRET.shellSp,ang:t.ang,dead:false});
-        sBoom();
-        G.shake=Math.max(G.shake,0.12);
+function fireStrikeShell(k){
+  /* sqrt 让落点在圆内均匀分布，否则会全挤在圆心 */
+  const a=Math.random()*TAU, rr=Math.sqrt(Math.random())*k.r;
+  const tx=k.x+Math.cos(a)*rr, ty=k.y+Math.sin(a)*rr;
+  /* 出膛点取"己方城堡方向"，而不是世界坐标的正上方。
+     快照对弹道走 180° 镜像（MX/MY/MANG），把"上方"写死进世界坐标的话，
+     客机和翻转视角的观众会看到导弹倒着飞；跟着 side 走的方向则天然随镜像一起翻。 */
+  const home=k.side?BASE1:BASE0;
+  const hx=home.x-tx, hy=home.y-ty, hd=Math.hypot(hx,hy)||1;
+  G.projs.push({kind:'mortar',side:k.side,
+    x:tx+hx/hd*STRIKE.lobDist+rand(-30,30), y:ty+hy/hd*STRIKE.lobDist,
+    tx,ty,tgt:null,cls:'siege',shooter:null,
+    dmg:STRIKE.dmg*((k.side===0&&RUN)?RUN.mods.turDmg:1),
+    splash:0,wsplash:STRIKE.splash,sp:STRIKE.shellSp,
+    ang:Math.atan2(-hy,-hx),dead:false});
+}
+function updateStrikes(dt){
+  for(const k of G.strikes){
+    /* 轮次计时独立于齐射：从"开火"起算，所以每轮开始正好隔 gap 秒。
+       若等一轮打完再起算，间隔会被齐射时长（shells×shellGap）撑长 */
+    if(k.wave<STRIKE.waves){
+      k.waveT-=dt;
+      if(k.waveT<=0){
+        k.wave++;
+        k.pend=STRIKE.shells;
+        k.shellT=0;
+        k.waveT=STRIKE.gap;
+        G.shake=Math.max(G.shake,0.14);
       }
+    }else k.lingerT-=dt;
+    if(k.pend>0){
+      k.shellT-=dt;
+      /* while 而非 if：低帧率/高倍速下一帧可能要补发多发，否则整轮会被拖长 */
+      while(k.pend>0&&k.shellT<=0){k.shellT+=STRIKE.shellGap;k.pend--;fireStrikeShell(k);}
+      /* 末轮打完后再留一会儿，否则圈会在最后一发落地前就消失 */
+      if(k.pend<=0&&k.wave>=STRIKE.waves)k.lingerT=STRIKE.lobDist/STRIKE.shellSp+0.4;
     }
   }
-  G.turrets=G.turrets.filter(t=>t.life>0);
+  G.strikes=G.strikes.filter(k=>k.wave<STRIKE.waves||k.pend>0||k.lingerT>0);
 }
 
 /* ---------------- 镜头跟随 ---------------- */

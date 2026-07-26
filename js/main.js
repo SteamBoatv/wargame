@@ -35,6 +35,7 @@ function frame(ts){
   else if(G.over){updateFloats(dt);G.shake=Math.max(0,G.shake-dt*1.6);}
   if(followMode&&mode==='play'&&!paused&&!G.over)followCam(dt*gameSpeed);
   draw();
+  tickEmoteCd(dt);   /* 表情冷却走真实时间，不受暂停/倍速影响 */
   refreshHUD();
 }
 resize();

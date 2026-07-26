@@ -5,7 +5,9 @@
 let NET=null;
 const TYPE_KEYS=Object.keys(UNITS);
 /* 弹道类型线材编码表（只可追加，不可重排——索引会写进快照） */
-const PROJ_KINDS=['arrow','dynamite','shell','laser_a','laser_b','laser_t'];
+const PROJ_KINDS=['arrow','dynamite','shell','laser_a','laser_b','laser_t','mortar']; /* 索引进快照，只能往后追加 */
+/* 单位状态位：1=移动 2=老兵 4=死亡 8=攻击 16=精锐（军衔用两位表示） */
+const vetOfFlag=fl=>(fl&16)?2:((fl&2)?1:0);
 const PVP_PER={icon:'⚔️',name:'好友对战',roster:null,decide:[9,9],queue:0,eco:0,mult:1,smart:false,evolve:true};
 
 async function netLib(){
@@ -290,7 +292,7 @@ function netLeave(){
   if(G){G.pvp=false;G.spectator=false;}
   document.body.classList.remove('spectating');
   $('specBadge').classList.add('hidden');
-  $('emoteBar').classList.add('hidden'); /* 展开状态会泄漏到下一局 */
+  setEmoteBar(false); /* 展开状态会泄漏到下一局 */
   $('foeLabel').textContent='敌军'; /* 观战时被改成 🔴，不还原会一直留在后续对局 */
   $('btnAgain').style.display='';
   $('pvpov').classList.add('hidden');
@@ -341,7 +343,7 @@ function specFlipView(){
   NET.specMirror=!NET.specMirror;
   buildWorld(NET.specMirror?mirrorDef(NET.specDef):NET.specDef);
   G.flags=CUR_DEF.flags.map(fs=>({s:fs*L,owner:-1,prog:0}));
-  G.units=[];G.projs=[];G.turrets=[];G.piles=[];G.booms=[];
+  G.units=[];G.projs=[];G.strikes=[];G.piles=[];G.booms=[];
   G._umap={};G._pmap={};
   const c0=G.cmdr0,c1=G.cmdr1;
   G.cmdr0=c1;G.cmdr1=c0;
@@ -419,7 +421,7 @@ function netApplyCmd(c){
     if(NET)NET.sendFx({k:'ev'});
   }else if(c.a==='p'){
     if(!cmdrOf(1).place.includes(c.t))return;
-    if(c.t==='turret'){turretPlaceCore(1,c.x,c.y,false);return;}
+    if(c.t==='strike'){strikeCore(1,c.x,c.y,false);return;}
     const pr=nearestPath(c.x,c.y);
     if(!pr||pr.d>76*pr.wf||pr.sep>5)return;
     if(PLACEABLES[c.t].drop)airdropCore(1,pr.s);
@@ -457,11 +459,12 @@ function netHostSnap(dt){
       pc:Object.fromEntries(Object.keys(G.pcds).map(k=>[k,[Math.round(G.pcds[k][0]*10)/10,Math.round(G.pcds[k][1]*10)/10]])),
       fl:G.flags.map(f=>[f.owner,Math.round(f.prog*100)]),
       us:G.units.map(u=>[u.uid,TYPE_KEYS.indexOf(u.type),u.side,Math.round(u.s),Math.round(u.off),
-        Math.round(u.hp),u.max,(u.moving?1:0)|(u.star?2:0)|(u.dying?4:0)|(u.atkT<0.4?8:0)]),
+        Math.round(u.hp),u.max,(u.moving?1:0)|((u.vet||0)>=1?2:0)|(u.dying?4:0)|(u.atkT<0.4?8:0)|
+        ((u.vet||0)>=2?16:0)]),
       pr:G.projs.map(p=>[p.pid,Math.max(0,PROJ_KINDS.indexOf(p.kind)),
         Math.round(p.x),Math.round(p.y),Math.round(p.ang*100),p.side?1:0]),
-      tr:G.turrets.map(t=>[t.side||0,Math.round(t.x),Math.round(t.y),
-        Math.round(t.ang*100),Math.round(t.life*10),Math.round((t.flash||0)*100)]),
+      sk:G.strikes.map(k=>[k.side||0,Math.round(k.x),Math.round(k.y),Math.round(k.r),
+        k.wave,Math.round(k.waveT*10),k.pend]),
       pi:G.piles.map(p=>[Math.round(p.s),p.amt]),
       bm:G.booms.map(b=>[Math.round(b.x),Math.round(b.y),Math.round(b.t*100)]),
       q1:G.aiQueue.map(i=>[TYPE_KEYS.indexOf(i.type),Math.round(i.t*10)]),
@@ -516,13 +519,13 @@ function netApplySnap(sn){
     let u=G._umap[uid];
     if(!u){
       u={uid,side,type:TYPE_KEYS[a[1]],s,off,hp,max,cd:9,walk:rand(0,6),lunge:0,
-         dying:(fl&4)?0.001:0,moving:!!(fl&1),kills:0,star:!!(fl&2),atkT:9,animT:rand(0,9),_ts:s};
+         dying:(fl&4)?0.001:0,moving:!!(fl&1),kills:0,vet:vetOfFlag(fl),atkT:9,animT:rand(0,9),_ts:s};
       G._umap[uid]=u;
       G.units.push(u);
     }else{
       u._ts=s;u.off=off;u.hp=hp;u.max=max;
       u.type=TYPE_KEYS[a[1]];
-      u.moving=!!(fl&1);u.star=!!(fl&2);
+      u.moving=!!(fl&1);u.vet=vetOfFlag(fl);
       if((fl&8)&&u.atkT>0.5)u.atkT=0;
       if((fl&4)&&!u.dying)u.dying=0.001;
     }
@@ -549,8 +552,8 @@ function netApplySnap(sn){
   }
   for(const pid in G._pmap)if(!pseen[pid])delete G._pmap[pid];
   G.projs=newPr;
-  G.turrets=sn.tr.map(a=>({side:MSIDE(a[0]),x:MX(a[1]),y:MY(a[2]),
-    ang:MANG(a[3]/100),life:a[4]/10,flash:a[5]/100,cd:9}));
+  G.strikes=(sn.sk||[]).map(a=>({side:MSIDE(a[0]),x:MX(a[1]),y:MY(a[2]),r:a[3],
+    wave:a[4],waveT:a[5]/10,pend:a[6]}));
   G.piles=sn.pi.map(a=>({s:MS(a[0]),amt:a[1]}));
   const nb=sn.bm.map(a=>({x:MX(a[0]),y:MY(a[1]),t:a[2]/100}));
   if(nb.some(b=>b.t<0.12)&&!G._boomHint){sBoom();G._boomHint=true;}
@@ -683,39 +686,64 @@ function applySpeedLocal(to){
   updateSpeedBtn();
 }
 
-/* ---- 快速表情（仅固定表情，不能发文字；EMOTES 表在 data.js） ---- */
-let lastEmoteT=0;
+/* ---- 快速表情（仅固定表情，不能发文字；EMOTES 表在 data.js） ----
+   气泡固定在屏幕左侧，不再跟着战场坐标跑——镜头拖到哪都看得见 */
+let emoteCdT=0;                       /* 剩余冷却秒数，由 ui.js 每帧递减并刷新按钮 */
 function sendEmoteIdx(i){
-  const n=performance.now();
-  if(n-lastEmoteT<1500)return;
-  lastEmoteT=n;
+  if(emoteCdT>0){toast('😶 表情冷却中，还需 '+Math.ceil(emoteCdT)+' 秒');return;}
+  emoteCdT=EMOTE_CD;
   const spec=!!(NET&&NET.spectator);
   if(NET&&NET.sendEmote){
     try{NET.sendEmote({i,spec,side:(NET.isHost?0:1)});}catch(e){}
   }
-  if(spec)showSpecEmote(i);
-  else showEmote(0,i);
-  $('emoteBar').classList.add('hidden');
+  pushEmoteBubble(i,spec?'spec':'me');
+  setEmoteBar(false);
+  updateEmoteBtn();
 }
-/* 观众表情：屏幕边缘的横向气泡流，与玩家表情明确区分 */
-function showSpecEmote(i){
-  const wrap=$('specEmotes');
+/* 面板开合统一走这里：展开时给 #emoteWrap 加 picking，让气泡流暂时收起 */
+function setEmoteBar(open){
+  const bar=$('emoteBar'), wrap=$('emoteWrap');
+  if(bar)bar.classList.toggle('hidden',!open);
+  if(wrap)wrap.classList.toggle('picking',!!open);
+}
+const EMOTE_WHO={me:'我',foe:'对手',spec:'👁️',blue:'🔵',red:'🔴'};
+/* who: me 自己 | foe 对手 | spec 观众 | blue/red 观战视角下的双方 */
+function pushEmoteBubble(i,who){
+  const wrap=$('emoteFeed');
   if(!wrap)return;
   const d=document.createElement('div');
-  d.className='specbub';
-  d.textContent='👁️'+(EMOTES[i]||'😄');
-  wrap.appendChild(d);
-  while(wrap.children.length>5)wrap.removeChild(wrap.firstChild);
-  setTimeout(()=>d.remove(),3400);
-}
-function showEmote(side,i){
-  if(!G)return;
-  const e=EMOTES[i]||'😄';
-  const b=side?BASE1:BASE0;
-  G.emotes=G.emotes||[];
-  G.emotes.push({x:b.x+(side?76:-76),y:b.y-70,e,t:0});
-  if(G.emotes.length>4)G.emotes.shift();
+  d.className='ebub '+who;
+  const tag=document.createElement('span');
+  tag.className='who';
+  tag.textContent=EMOTE_WHO[who]||'我';
+  const em=document.createElement('span');
+  em.className='face';
+  em.textContent=EMOTES[i]||'😄';
+  d.appendChild(tag); d.appendChild(em);
+  wrap.insertBefore(d,wrap.firstChild);   /* 前插：新气泡永远在最上面且不会被裁 */
+  while(wrap.children.length>3)wrap.removeChild(wrap.lastChild);
+  setTimeout(()=>d.remove(),3600);
   sClick();
+}
+function showSpecEmote(i){pushEmoteBubble(i,'spec');}
+function showEmote(side,i){
+  if(NET&&NET.spectator)pushEmoteBubble(i,side===0?'blue':'red'); /* 观众没有"我方"，按阵营色标注 */
+  else pushEmoteBubble(i,side===0?'me':'foe');
+}
+/* 冷却推进 + 按钮刷新，由 ui.js 的 HUD 循环每帧调用 */
+function tickEmoteCd(dt){
+  if(emoteCdT<=0)return;
+  emoteCdT=Math.max(0,emoteCdT-dt);
+  updateEmoteBtn();
+}
+function updateEmoteBtn(){
+  const b=$('btnEmote');
+  if(!b)return;
+  const cd=emoteCdT>0;
+  b.textContent=cd?String(Math.ceil(emoteCdT)):'😄';
+  b.classList.toggle('cooling',cd);
+  const bar=$('emoteBar');
+  if(bar)for(const c of bar.children)c.disabled=cd;
 }
 
 /* ---- 结算 ---- */
