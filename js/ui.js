@@ -42,6 +42,7 @@ function refreshHUD(){
     renderQueue();
     return;
   }
+  if($('foeLabel').textContent!=='敌军')$('foeLabel').textContent='敌军';
   const lock=mode!=='play'||!!G.over||paused;
   for(const k of cmdrOf(0).roster[G.era]){
     const b=$('btn-'+k);

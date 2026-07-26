@@ -32,7 +32,12 @@ async function netOpen(code,role){
   const [sendFx,onFx]=room.makeAction('f');
   const [sendMeta,onMeta]=room.makeAction('m');
   const [sendEmote,onEmote]=room.makeAction('g');
-  NET={room,code,role,isHost,spectator,peer:null,specs:{},specCount:0,
+  /* 席位规则（防第三者乱入）：
+     - NET.peer   仅指“我的对手”：房主认第一个 guest，客机只认 host，观众永远为 null
+     - NET.hostId 房主的 peer id，所有人都记录，观众靠它判断房主是否掉线
+     - NET.roles  peer id -> 角色，用于校验每条消息的来源身份 */
+  NET={room,code,role,isHost,spectator,peer:null,hostId:isHost?'self':null,
+       roles:{},specs:{},specCount:0,full:false,
        specMirror:false,lastStart:null,started:false,
        sendCmd,sendSnap,sendFx,sendMeta,sendEmote,snapT:0,specSnapT:0};
   /* Trystero 房间是全网状连接，广播天然到达所有人，无需主机中继 */
@@ -45,25 +50,35 @@ async function netOpen(code,role){
     showEmote(side,d.i|0);
   });
   room.onPeerJoin(id=>{
-    /* 自报身份，让对方知道该把我当玩家还是观众 */
+    /* 只自报身份，绝不在握手前认定席位——连接顺序不代表角色 */
     try{sendMeta({k:'iam',role},id);}catch(e){sendMeta({k:'iam',role});}
-    if(!spectator&&!isHost)NET.peer=NET.peer||id;
     netLobbyStatus();
     sFlag();
   });
   room.onPeerLeave(id=>{
+    const wasRole=NET.roles[id];
+    delete NET.roles[id];
     if(NET.specs[id]){
       delete NET.specs[id];
       NET.specCount=Math.max(0,NET.specCount-1);
       netLobbyStatus();
       return; /* 观众进出绝不能影响对局 */
     }
-    if(id!==NET.peer&&NET.peer)return;
+    if(NET.spectator){
+      /* 观众只关心房主是否还在，其余人（对手、别的观众、误入者）离开一律无视 */
+      if(id!==NET.hostId)return;
+      NET.hostId=null;
+      if(G&&G.pvp&&!G.over)netSpecEnd('对局已结束（房主离线）');
+      else netLobbyStatus();
+      return;
+    }
+    if(id!==NET.peer){ /* 不是我的对手（观众/误入者）离开，与对局无关 */
+      if(wasRole)netLobbyStatus();
+      return;
+    }
     NET.peer=null;
-    if(G&&G.pvp&&!G.over){
-      if(NET.spectator)netSpecEnd('对局已结束（房主离线）');
-      else netShowEnd(true,'对方已断线');
-    }else netLobbyStatus();
+    if(G&&G.pvp&&!G.over)netShowEnd(true,'对方已断线');
+    else netLobbyStatus();
   });
   /* 观众发来的任何指令一律丢弃 */
   onCmd((c,fromId)=>{
@@ -76,35 +91,63 @@ async function netOpen(code,role){
   onMeta((mt,fromId)=>{
     if(!NET)return;
     if(mt.k==='iam'){
+      NET.roles[fromId]=mt.role;
+      if(mt.role==='host')NET.hostId=fromId;
       if(mt.role==='spectator'){
         if(!NET.specs[fromId]){NET.specs[fromId]=1;NET.specCount++;}
-        /* 中途进来的观众缺开局信息，主机定向补发一份 */
-        if(NET.isHost&&NET.started&&NET.lastStart)
+        /* 中途进来的观众缺开局信息，主机定向补发——但仅限对局仍在进行 */
+        if(NET.isHost&&NET.started&&NET.lastStart&&G&&G.pvp&&!G.over)
           try{sendMeta(Object.assign({k:'start'},NET.lastStart),fromId);}catch(e){}
         netLobbyStatus();
-      }else if(!NET.spectator){
-        if(NET.isHost&&NET.peer&&NET.peer!==fromId){
+        return;
+      }
+      if(NET.spectator){netLobbyStatus();return;} /* 观众不参与席位分配 */
+      if(NET.isHost){
+        /* 房主：只接纳第一个 guest，其余人明确拒绝 */
+        if(mt.role!=='guest')return;
+        if(NET.peer&&NET.peer!==fromId){
           try{sendMeta({k:'full'},fromId);}catch(e){}
           return;
         }
         NET.peer=fromId;
-        if(NET.isHost)sendMeta({k:'hi'},fromId);
-        if(NET.myLocked)sendMeta({k:'cmdrLock',c:NET.myCmdr});
-        netLobbyStatus();
+        sendMeta({k:'hi'},fromId);
+      }else{
+        /* 客机：对手只可能是房主，别的 guest 一概不认 */
+        if(mt.role!=='host')return;
+        if(NET.peer&&NET.peer!==fromId)return;
+        NET.peer=fromId;
       }
+      if(NET.myLocked)sendMeta({k:'cmdrLock',c:NET.myCmdr},fromId);
+      netLobbyStatus();
       return;
     }
     if(mt.k==='full'&&!NET.spectator&&!NET.isHost){
-      $('pvpStatus').textContent='⚠️ 房间里已经有两名玩家了 —— 可改用观战链接围观';
+      /* 满员是终局状态：退房，别再继续干扰这一局 */
+      NET.full=true; NET.peer=null; NET.myLocked=false; NET.peerLocked=false;
+      try{NET.room.leave();}catch(e){}
+      $('pvpPickSec').style.display='none';
+      $('btnPvpStart').style.display='none';
+      $('pvpStatus').textContent='⚠️ 房间已满（已有两名玩家）—— 请改用房主提供的“观战链接”围观';
       return;
     }
     if(NET.spectator){
-      if(mt.k==='start')netStartSpectator(mt);
-      else if(mt.k==='end')netSpecEnd(mt.winner===0?'🔵 蓝方获胜':'🔴 红方获胜');
+      if(mt.k==='start'&&fromId===NET.hostId)netStartSpectator(mt);
+      else if(mt.k==='end'&&fromId===NET.hostId){
+        /* 结算方按当前视角归位，否则翻转视角后会宣告错误的一方获胜 */
+        const w=NET.specMirror?1-(mt.winner|0):(mt.winner|0);
+        netSpecEnd(w===0?'🔵 蓝方获胜':'🔴 红方获胜');
+      }
       return;
     }
-    if(mt.k==='hi'){NET.peer=NET.peer||fromId||'host';netLobbyStatus();}
-    else if(mt.k==='cmdrLock'){NET.peerCmdr=mt.c;NET.peerLocked=true;netLobbyStatus();netMaybeReveal();sFlag();}
+    /* 以下都是"只能来自对手"的消息，来源不符一律丢弃 */
+    if(mt.k==='hi'){
+      if(NET.peer&&fromId!==NET.peer)return;
+      NET.peer=NET.peer||fromId;
+      netLobbyStatus();
+      return;
+    }
+    if(NET.peer&&fromId!==NET.peer)return;
+    if(mt.k==='cmdrLock'){NET.peerCmdr=mt.c;NET.peerLocked=true;netLobbyStatus();netMaybeReveal();sFlag();}
     else if(mt.k==='start'&&!NET.isHost)netStartGuest(mt);
     else if(mt.k==='end'&&!NET.isHost)netShowEnd(mt.winner===1,null);
     else if(mt.k==='spdReq')showSpdAsk(mt.to);
@@ -153,7 +196,9 @@ function netLockCmdr(){
   if(!NET.peer){toast('⌛ 等对方加入后再确认');return;}
   NET.myCmdr=selCmdr;
   NET.myLocked=true;
-  NET.sendMeta({k:'cmdrLock',c:selCmdr});
+  /* 定向发给对手，避免误入的第三者收到并污染对局状态 */
+  if(NET.peer)NET.sendMeta({k:'cmdrLock',c:selCmdr},NET.peer);
+  else NET.sendMeta({k:'cmdrLock',c:selCmdr});
   netLobbyStatus();
   netMaybeReveal();
   sClick();
@@ -170,6 +215,7 @@ function netMaybeReveal(){
 }
 function netLobbyStatus(){
   if(!NET)return;
+  if(NET.full)return; /* 已被房间拒绝，保留那条终局提示 */
   const specTxt=NET.specCount?('　👁️ 观众 '+NET.specCount+' 人'):'';
   if(NET.spectator){
     $('pvpLink').textContent='房间号：'+NET.code;
@@ -218,6 +264,7 @@ function netLeave(){
   if(G){G.pvp=false;G.spectator=false;}
   document.body.classList.remove('spectating');
   $('specBadge').classList.add('hidden');
+  $('foeLabel').textContent='敌军'; /* 观战时被改成 🔴，不还原会一直留在后续对局 */
   $('btnAgain').style.display='';
   $('pvpov').classList.add('hidden');
 }
@@ -425,8 +472,10 @@ function netApplySnap(sn){
   G.baseHp=mir?[sn.bh[1],sn.bh[0]]:[sn.bh[0],sn.bh[1]];
   G.bountyT=sn.bt;
   if(sn.pc)for(const k in sn.pc)if(G.pcds[k])G.pcds[k]=mir?[sn.pc[k][1],sn.pc[k][0]]:[sn.pc[k][0],sn.pc[k][1]];
+  /* 哨站数组不需要换序：mirrorDef 只把位置映射成 1-f，没有重排数组，
+     所以三种视角下 flags[i] 都对应同一个哨站 */
   G.flags.forEach((f,i)=>{
-    const a=sn.fl[mir?i:(sn.fl.length-1-i)];
+    const a=sn.fl[i];
     if(!a)return;
     f.owner=a[0]===-1?-1:MSIDE(a[0]);
     f.prog=mir?-a[1]/100:a[1]/100;
@@ -645,6 +694,7 @@ function showEmote(side,i){
 function netShowEnd(won,reason){
   clearTimeout(spdAskTimer);
   $('spdAsk').classList.add('hidden');
+  if(NET){NET.started=false;NET.lastStart=null;} /* 掉线结束这条路径不会广播 end，也要就地清理 */
   if(G)G.over=won?1:-1;
   $('goTitle').textContent=(won?'🎉 胜利！':'💀 战败…')+(reason?'（'+reason+'）':'');
   $('btnAgain').style.display='none';

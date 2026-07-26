@@ -82,7 +82,9 @@ canvas.bi{width:27px;height:27px;image-rendering:pixelated}
 /* 观战：只在 body.spectating 下出现的元素 */
 .specOnly{display:none}
 body.spectating .specOnly{display:inline-flex}
-body.spectating #unitbar,body.spectating #queuebar{display:none}
+body.spectating #unitbar{display:none}
+/* 观众保留生产队列（快照专门传了 q0/q1），队列条下移填补出兵栏的位置 */
+body.spectating #queuebar{bottom:calc(18px + env(safe-area-inset-bottom))}
 #specBadge{position:fixed;left:50%;transform:translateX(-50%);top:calc(6px + env(safe-area-inset-top));
   z-index:31;background:rgba(24,18,8,.72);color:#ffd76a;font-size:12px;font-weight:800;
   padding:3px 12px;border-radius:12px;pointer-events:none}

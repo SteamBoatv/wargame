@@ -145,7 +145,10 @@ function endGame(r){
   setTimeout(()=>{
     if(!G||G.over!==r)return;
     if(G.pvp){
-      if(NET&&NET.isHost)NET.sendMeta({k:'end',winner:r>0?0:1});
+      if(NET&&NET.isHost){
+        NET.sendMeta({k:'end',winner:r>0?0:1});
+        NET.started=false; NET.lastStart=null; /* 别再给新观众补发已结束的对局 */
+      }
       netShowEnd(r>0,null);
       return;
     }
