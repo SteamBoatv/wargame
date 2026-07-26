@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>AI 生图素材可行性测试台</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;padding:18px;background:#1a1d26;color:#e6e2d6;
+     font:14px/1.6 system-ui,"Microsoft YaHei",sans-serif}
+h1{font-size:19px;margin:0 0 4px}
+h2{font-size:15px;margin:26px 0 10px;color:#ffd882;
+   border-bottom:1px solid #333947;padding-bottom:5px}
+.hint{color:#98a0b4;font-size:12.5px;margin:0 0 14px}
+code{background:#252a36;padding:1px 5px;border-radius:3px;font-size:12px}
+
+#drop{border:2px dashed #4a5266;border-radius:10px;padding:26px;text-align:center;
+      color:#98a0b4;cursor:pointer;transition:.15s}
+#drop.hot{border-color:#ffd882;background:#232838;color:#ffd882}
+
+.row{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-end}
+.cell{text-align:center}
+.cell .lab{font-size:11.5px;color:#98a0b4;margin-top:5px;white-space:pre-line}
+.px{image-rendering:pixelated}
+.chk{background:
+  linear-gradient(45deg,#2b3040 25%,transparent 25%,transparent 75%,#2b3040 75%),
+  linear-gradient(45deg,#2b3040 25%,#22262f 25%,#22262f 75%,#2b3040 75%);
+  background-size:14px 14px;background-position:0 0,7px 7px}
+
+.card{background:#20242f;border:1px solid #333947;border-radius:10px;
+      padding:14px 16px;margin:16px 0}
+.card h3{margin:0 0 10px;font-size:15px;color:#9fd0ff}
+.ctl{display:flex;gap:16px;flex-wrap:wrap;align-items:center;
+     margin:10px 0 14px;font-size:12.5px;color:#b9c0d0}
+.ctl label{display:flex;gap:6px;align-items:center}
+.ctl input[type=range]{width:112px}
+.ctl input[type=number]{width:56px;background:#171a22;color:#e6e2d6;
+     border:1px solid #3b4254;border-radius:4px;padding:2px 5px}
+.stat{font-size:12px;color:#98a0b4;margin-top:10px;line-height:1.8}
+.stat b{color:#ffd882;font-weight:600}
+.bad{color:#ff8a7a}.ok{color:#7ee08a}.warn{color:#ffc860}
+
+/* 真实素材基准：CSS steps 逐帧播放，纯展示不读像素，避免 file:// 画布污染 */
+.base{image-rendering:pixelated;background-repeat:no-repeat}
+.b-warrior{width:68px;height:68px;
+  background-image:url('../assets/ts/blue_warrior_run.png');
+  background-size:408px 68px;   /* 6 帧 × 68 */
+  animation:w6 .6s steps(6) infinite}
+@keyframes w6{to{background-position:-408px 0}}
+.b-mecha{width:110px;height:110px;
+  background-image:url('../assets/mech/blue_mecha_run.png');
+  background-size:880px 110px;  /* 8 帧 × 110 */
+  animation:w8 .8s steps(8) infinite}
+@keyframes w8{to{background-position:-880px 0}}
+.b-cyborg{width:112px;height:112px;
+  background-image:url('../assets/mech/blue_cyborg_run.png');
+  background-size:896px 112px;
+  animation:w8 .8s steps(8) infinite}
+.b-tower{width:90px;height:180px;
+  background-image:url('../assets/ts/bldg_blue_tower.png');background-size:90px 180px}
+</style>
+</head>
+<body>
+
+<h1>🧪 AI 生图素材可行性测试台</h1>
+<p class="hint">
+把生成的 PNG 拖进下面的区域（可多选）。所有处理都在本地浏览器里做，不上传。<br>
+判据不是"单看好不好看"，而是<b>和右侧真实素材同尺寸、同 10fps 帧率并排时是否掉档</b>。
+</p>
+
+<h2>基准：游戏里正在用的真实素材（同尺寸、10fps）</h2>
+<p class="hint">这一行是及格线。AI 素材要放在旁边不明显掉档才算可用。</p>
+<div class="row">
+  <div class="cell"><div class="base b-warrior"></div>
+    <div class="lab">Tiny Swords 剑士
+68px · 6帧</div></div>
+  <div class="cell"><div class="base b-cyborg"></div>
+    <div class="lab">Foozle 改造兵
+112px · 8帧</div></div>
+  <div class="cell"><div class="base b-mecha"></div>
+    <div class="lab">Foozle 重型机甲
+110px · 8帧</div></div>
+  <div class="cell"><div class="base b-tower"></div>
+    <div class="lab">Tiny Swords 塔
+静态</div></div>
+</div>
+
+<h2>待测素材</h2>
+<div id="drop">📂 把 PNG 拖到这里，或点击选择文件</div>
+<input id="file" type="file" accept="image/png,image/webp,image/jpeg" multiple hidden>
+<div id="out"></div>
+
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const drop=$('drop'), out=$('out'), fileIn=$('file');
+
+drop.onclick=()=>fileIn.click();
+fileIn.onchange=e=>load([...e.target.files]);
+drop.ondragover=e=>{e.preventDefault();drop.classList.add('hot');};
+drop.ondragleave=()=>drop.classList.remove('hot');
+drop.ondrop=e=>{e.preventDefault();drop.classList.remove('hot');
+  load([...e.dataTransfer.files].filter(f=>/image/.test(f.type)));};
+
+function load(files){
+  for(const f of files){
+    /* blob: URL 与页面同源，画布不会被污染，getImageData 可用；
+       直接用 ../ 相对路径读本地文件在 file:// 下会污染画布 */
+    const img=new Image();
+    img.onload=()=>addCard(f.name,img);
+    img.src=URL.createObjectURL(f);
+  }
+}
+
+/* ---------- 像素处理 ---------- */
+function srcData(img){
+  const c=document.createElement('canvas');
+  c.width=img.naturalWidth; c.height=img.naturalHeight;
+  const x=c.getContext('2d',{willReadFrequently:true});
+  x.drawImage(img,0,0);
+  return x.getImageData(0,0,c.width,c.height);
+}
+function countColors(d,aMin=8){
+  const s=new Set();
+  for(let i=0;i<d.data.length;i+=4){
+    if(d.data[i+3]<aMin)continue;
+    s.add((d.data[i]<<16)|(d.data[i+1]<<8)|d.data[i+2]);
+  }
+  return s.size;
+}
+/* 边缘半透明像素占比：抠图质量指标。像素画应当接近 0 */
+function softAlphaRatio(d){
+  let soft=0,solid=0;
+  for(let i=3;i<d.data.length;i+=4){
+    const a=d.data[i];
+    if(a>=250)solid++;
+    else if(a>=12)soft++;
+  }
+  return solid?soft/(soft+solid):0;
+}
+function medianCut(px,n){
+  let boxes=[px];
+  const rng=b=>{
+    const lo=[255,255,255],hi=[0,0,0];
+    for(const p of b)for(let c=0;c<3;c++){
+      if(p[c]<lo[c])lo[c]=p[c];
+      if(p[c]>hi[c])hi[c]=p[c];
+    }
+    let ch=0,best=-1;
+    for(let c=0;c<3;c++){const r=hi[c]-lo[c];if(r>best){best=r;ch=c;}}
+    return {ch,range:best};
+  };
+  while(boxes.length<n){
+    let bi=-1,best=0;
+    for(let i=0;i<boxes.length;i++){
+      if(boxes[i].length<2)continue;
+      const r=rng(boxes[i]).range;
+      if(r>best){best=r;bi=i;}
+    }
+    if(bi<0)break;
+    const b=boxes[bi], ch=rng(b).ch;
+    b.sort((p,q)=>p[ch]-q[ch]);
+    const m=b.length>>1;
+    boxes.splice(bi,1,b.slice(0,m),b.slice(m));
+  }
+  return boxes.filter(b=>b.length).map(b=>{
+    const s=[0,0,0];
+    for(const p of b){s[0]+=p[0];s[1]+=p[1];s[2]+=p[2];}
+    return [Math.round(s[0]/b.length),Math.round(s[1]/b.length),Math.round(s[2]/b.length)];
+  });
+}
+function hueRot(r,g,b,deg,satMin=0.30){
+  const mx=Math.max(r,g,b)/255, mn=Math.min(r,g,b)/255, d=mx-mn;
+  const s=mx?d/mx:0;
+  if(s<=satMin)return [r,g,b];              /* 低饱和（皮肤/金属）不动 */
+  let h=0;
+  if(d){
+    if(mx===r/255)h=(((g-b)/255)/d)%6;
+    else if(mx===g/255)h=(((b-r)/255)/d)+2;
+    else h=(((r-g)/255)/d)+4;
+  }
+  h=((h/6+deg/360)%1+1)%1;
+  const i=Math.floor(h*6), f=h*6-i, v=mx;
+  const p=v*(1-s), q=v*(1-f*s), t=v*(1-(1-f)*s);
+  const o=[[v,t,p],[q,v,p],[p,v,t],[p,q,v],[t,p,v],[v,p,q]][i%6];
+  return o.map(x=>Math.round(x*255));
+}
+/* 降采样→量化→硬化 alpha，得到一帧处理后的 canvas */
+function process(img,sx,sy,sw,sh,target,colors,aCut,deg){
+  const small=document.createElement('canvas');
+  const k=target/Math.max(sw,sh);
+  small.width=Math.max(1,Math.round(sw*k));
+  small.height=Math.max(1,Math.round(sh*k));
+  const sc=small.getContext('2d',{willReadFrequently:true});
+  sc.imageSmoothingEnabled=true; sc.imageSmoothingQuality='high';
+  sc.drawImage(img,sx,sy,sw,sh,0,0,small.width,small.height);
+  const d=sc.getImageData(0,0,small.width,small.height), a=d.data;
+  const px=[];
+  for(let i=0;i<a.length;i+=4){
+    if(a[i+3]<aCut)continue;
+    px.push([a[i],a[i+1],a[i+2]]);
+  }
+  const pal=px.length?medianCut(px,colors):[[0,0,0]];
+  for(let i=0;i<a.length;i+=4){
+    if(a[i+3]<aCut){a[i+3]=0;continue;}
+    a[i+3]=255;                                   /* 硬化 alpha，去掉半透明毛边 */
+    let bi=0,bd=1e9;
+    for(let j=0;j<pal.length;j++){
+      const dr=a[i]-pal[j][0],dg=a[i+1]-pal[j][1],db=a[i+2]-pal[j][2];
+      const dd=dr*dr+dg*dg+db*db;
+      if(dd<bd){bd=dd;bi=j;}
+    }
+    let c=pal[bi];
+    if(deg)c=hueRot(c[0],c[1],c[2],deg);
+    a[i]=c[0];a[i+1]=c[1];a[i+2]=c[2];
+  }
+  sc.putImageData(d,0,0);
+  return small;
+}
+/* 基准素材：不读像素只显示，所以 file:// 下也不会污染画布。
+   帧索引由调用方传入 —— 和待测素材共用同一个计时器，两边逐帧同步才好比 */
+const BASE={
+  warrior:{img:'../assets/ts/blue_warrior_run.png',n:6,name:'Tiny Swords 剑士'},
+  cyborg :{img:'../assets/mech/blue_cyborg_run.png',n:8,name:'Foozle 改造兵'},
+  mecha  :{img:'../assets/mech/blue_mecha_run.png', n:8,name:'Foozle 重型机甲'},
+};
+function baseNode(kind,size){
+  const c=BASE[kind], d=document.createElement('div');
+  d.className='px';
+  d.style.cssText=`width:${size}px;height:${size}px;background-repeat:no-repeat;`+
+    `background-image:url('${c.img}');background-size:${size*c.n}px ${size}px`;
+  d.dataset.n=c.n; d.dataset.sz=size;
+  return d;
+}
+function baseStep(node,fi){
+  const n=+node.dataset.n, sz=+node.dataset.sz;
+  node.style.backgroundPosition=(-(fi%n)*sz)+'px 0';
+}
+function view(cv,size){
+  const o=document.createElement('canvas');
+  o.width=o.height=size;
+  const c=o.getContext('2d');
+  c.imageSmoothingEnabled=false;
+  const k=Math.min(size/cv.width,size/cv.height);
+  const w=cv.width*k,h=cv.height*k;
+  c.drawImage(cv,(size-w)/2,(size-h)/2,w,h);
+  o.className='px chk';
+  return o;
+}
+
+/* ---------- 卡片 ---------- */
+function addCard(name,img){
+  const W=img.naturalWidth,H=img.naturalHeight;
+  const guess=Math.max(1,Math.round(W/H));     /* 4:1 长图默认切 4 帧 */
+  const card=document.createElement('div');
+  card.className='card';
+  card.innerHTML=`<h3>${name} <span style="color:#98a0b4;font-weight:400">
+    ${W}×${H}</span></h3>
+    <div class="ctl">
+      <label>帧数 <input type="number" class="c-n" min="1" max="12" value="${guess}"></label>
+      <label>目标像素 <input type="range" class="c-t" min="24" max="128" step="4" value="64">
+        <span class="v-t">64</span></label>
+      <label>调色板 <input type="range" class="c-c" min="8" max="64" step="4" value="24">
+        <span class="v-c">24</span></label>
+      <label>透明阈值 <input type="range" class="c-a" min="1" max="200" value="90">
+        <span class="v-a">90</span></label>
+      <label>游戏内显示 <input type="range" class="c-d" min="40" max="160" step="2" value="68">
+        <span class="v-d">68</span>px</label>
+    </div>
+    <div class="row r-main"></div>
+    <div class="row r-frames" style="margin-top:14px"></div>
+    <div class="stat s-out"></div>`;
+  out.appendChild(card);
+
+  const q=s=>card.querySelector(s);
+  const inputs=['c-n','c-t','c-c','c-a','c-d'].map(c=>q('.'+c));
+  const src=srcData(img);
+  const rawColors=countColors(src), soft=softAlphaRatio(src);
+
+  let animT=null;
+  function render(){
+    if(animT){clearInterval(animT);animT=null;}
+    const n=Math.max(1,Math.min(12,+q('.c-n').value|0));
+    const target=+q('.c-t').value, colors=+q('.c-c').value;
+    const aCut=+q('.c-a').value, disp=+q('.c-d').value;
+    q('.v-t').textContent=target; q('.v-c').textContent=colors;
+    q('.v-a').textContent=aCut;   q('.v-d').textContent=disp;
+
+    const fw=W/n;
+    const frames=[],framesRed=[];
+    for(let i=0;i<n;i++){
+      frames.push(process(img,i*fw,0,fw,H,target,colors,aCut,0));
+      framesRed.push(process(img,i*fw,0,fw,H,target,colors,aCut,150));
+    }
+
+    /* 主区：原图 / 放大细节 / 游戏内真实尺寸（播放）/ 红方换色 */
+    const main=q('.r-main'); main.innerHTML='';
+    const mk=(node,lab)=>{
+      const d=document.createElement('div'); d.className='cell';
+      d.appendChild(node);
+      const l=document.createElement('div'); l.className='lab'; l.textContent=lab;
+      d.appendChild(l); main.appendChild(d); return d;
+    };
+    /* 原图限宽：4:1 长图按高度撑开会有 600px 宽，把下面的真实尺寸对比行挤到换行 */
+    const o=document.createElement('img');
+    o.src=img.src; o.className='px chk';
+    o.style.cssText='max-width:300px;max-height:110px;height:auto;width:auto';
+    mk(o,'原图');
+    mk(view(frames[0],110),`处理后放大\n${frames[0].width}×${frames[0].height}px`);
+
+    /* 拿住 cell 而不是 canvas：canvas 被换掉后就脱离 DOM，parentNode 会变 null */
+    const cellB=mk(view(frames[0],disp),`⬅ 待测 · 游戏内真实尺寸 ${disp}px\n蓝方 · 10fps`);
+    const cellR=mk(view(framesRed[0],disp),`红方（色相 +150°）\n验证阵营换色`);
+    /* 基准并排：同尺寸、同计时器逐帧同步，这是判断"掉不掉档"的唯一有效方式 */
+    const bases=['warrior','cyborg','mecha'].map(k=>{
+      const node=baseNode(k,disp);
+      mk(node,'基准 · '+BASE[k].name);
+      return node;
+    });
+    let fi=0;
+    animT=setInterval(()=>{
+      fi++;
+      if(n>1){
+        cellB.replaceChild(view(frames[fi%n],disp),cellB.firstChild);
+        cellR.replaceChild(view(framesRed[fi%n],disp),cellR.firstChild);
+      }
+      bases.forEach(b=>baseStep(b,fi));
+    },100);                                    /* 10fps，与游戏一致 */
+
+    /* 切帧一览：一眼看四帧是不是同一个角色 */
+    const fr=q('.r-frames'); fr.innerHTML='';
+    if(n>1)for(let i=0;i<n;i++){
+      const d=document.createElement('div'); d.className='cell';
+      d.appendChild(view(frames[i],96));
+      const l=document.createElement('div'); l.className='lab'; l.textContent='第 '+(i+1)+' 帧';
+      d.appendChild(l); fr.appendChild(d);
+    }
+
+    /* 统计 */
+    const qc=countColors(frames[0].getContext('2d')
+      .getImageData(0,0,frames[0].width,frames[0].height));
+    const softPct=(soft*100).toFixed(1);
+    const softCls=soft>0.35?'bad':soft>0.15?'warn':'ok';
+    q('.s-out').innerHTML=
+      `原图颜色数 <b>${rawColors.toLocaleString()}</b>`+
+      `（真实像素画通常 &lt; 100；越高说明越是"看着像像素画的插画"）<br>`+
+      `量化后 <b>${qc}</b> 色 · 单帧 <b>${frames[0].width}×${frames[0].height}</b>px<br>`+
+      `边缘半透明像素占比 <span class="${softCls}">${softPct}%</span>`+
+      `（像素画应接近 0%，越高说明抠图后毛边越脏）`;
+  }
+  inputs.forEach(el=>{el.oninput=render;});
+  render();
+}
+</script>
+</body>
+</html>
