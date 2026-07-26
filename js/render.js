@@ -133,7 +133,8 @@ function drawBuilding(u,p,st){
 }
 /* 机械单位：帧尺寸随动画不同（例如 Droid01 射击帧 48px、待机 32px），
    按 每源像素固定屏幕尺寸(mpx) 缩放并底部对齐，保证机体大小一致 */
-function drawMechUnit(u,p,st,dir){
+/* dir=推进方向（用于冲刺位移），fdir=朝向（守备队后撤归位时与推进方向相反） */
+function drawMechUnit(u,p,st,fdir){
   const set=ASSETS.mech[u.side?'red':'blue'];
   const runImg=set[st.mech+'_run'];
   if(!runImg)return false;
@@ -153,13 +154,14 @@ function drawMechUnit(u,p,st,dir){
     const n=Math.round(img.width/img.height);
     fi=((Math.floor((G?G.t:0)*8+u.off))%n+n)%n;
   }
-  if(p.tx*dir<-0.05)ctx.scale(-1,1);
+  if(p.tx*fdir<-0.05)ctx.scale(-1,1);
   const cell=img.height, dw=cell*px;
   ctx.drawImage(img,fi*cell,0,cell,cell,-dw/2,-dw+8,dw,dw);
   return true;
 }
 function drawUnit(u,p){
   const st=UNITS[u.type], dir=u.side?-1:1;
+  const fdir=u.back?-dir:dir;   /* 守备队后撤归位时朝向反过来 */
   if(st.cls==='bldg'){drawBuilding(u,p,st);return;}
   const vr=u.vet?VET_RANKS[u.vet]:null;
   ctx.fillStyle='rgba(0,0,0,.2)';
@@ -200,7 +202,7 @@ function drawUnit(u,p){
   const gobSheet=st.gob?(ASSETS.gob[(G&&G.stage)?G.stage.gobColor:'red']||{})[st.gob]:null;
   const set=st.ts?ASSETS.ts[unitColor(u.side,st)]:null;
   const runImg=set?set[TS_UNITS[st.ts].run]:null;
-  if(st.mech&&drawMechUnit(u,p,st,dir)){
+  if(st.mech&&drawMechUnit(u,p,st,fdir)){
     /* 机械单位已绘制 */
   }else if(gobSheet){
     const meta=GOB_META[st.gob];
@@ -208,7 +210,7 @@ function drawUnit(u,p){
     if(u.atkT<meta.atk[1]*0.1){row=meta.atk[0];n=meta.atk[1];fi=Math.min(n-1,Math.floor(u.atkT*10));}
     else if(u.moving){row=meta.run[0];n=meta.run[1];fi=Math.floor(u.animT*10)%n;}
     else{row=meta.idle[0];n=meta.idle[1];fi=((Math.floor((G?G.t:0)*8+u.off))%n+n)%n;}
-    if(p.tx*dir<-0.05)ctx.scale(-1,1);
+    if(p.tx*fdir<-0.05)ctx.scale(-1,1);
     const dw=66;
     ctx.drawImage(gobSheet,fi*192,row*192,192,192,-dw/2,-dw*0.74,dw,dw);
   }else if(runImg){
@@ -227,12 +229,12 @@ function drawUnit(u,p){
       const n=Math.round(img.width/img.height);
       fi=((Math.floor((G?G.t:0)*8+u.off))%n+n)%n;
     }
-    if(p.tx*dir<-0.05)ctx.scale(-1,1);
+    if(p.tx*fdir<-0.05)ctx.scale(-1,1);
     const cell=img.height;
     const dw=68*cell/192;
     ctx.drawImage(img,fi*cell,0,cell,cell,-dw/2,-dw*0.74,dw,dw);
   }else{
-    if(p.tx*dir>0.05)ctx.scale(-1,1);
+    if(p.tx*fdir>0.05)ctx.scale(-1,1);
     ctx.font=em(38);
     ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText(st.emoji,0,-16);

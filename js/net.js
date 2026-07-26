@@ -6,7 +6,8 @@ let NET=null;
 const TYPE_KEYS=Object.keys(UNITS);
 /* 弹道类型线材编码表（只可追加，不可重排——索引会写进快照） */
 const PROJ_KINDS=['arrow','dynamite','shell','laser_a','laser_b','laser_t','mortar']; /* 索引进快照，只能往后追加 */
-/* 单位状态位：1=移动 2=老兵 4=死亡 8=攻击 16=精锐（军衔用两位表示） */
+/* 单位状态位：1=移动 2=老兵 4=死亡 8=攻击 16=精锐（军衔用两位表示） 32=后撤朝向
+   32 位在 180° 镜像下不变：推进方向随 side 一起翻，"是否逆着推进方向走"因此是不变量 */
 const vetOfFlag=fl=>(fl&16)?2:((fl&2)?1:0);
 const PVP_PER={icon:'⚔️',name:'好友对战',roster:null,decide:[9,9],queue:0,eco:0,mult:1,smart:false,evolve:true};
 
@@ -460,7 +461,7 @@ function netHostSnap(dt){
       fl:G.flags.map(f=>[f.owner,Math.round(f.prog*100)]),
       us:G.units.map(u=>[u.uid,TYPE_KEYS.indexOf(u.type),u.side,Math.round(u.s),Math.round(u.off),
         Math.round(u.hp),u.max,(u.moving?1:0)|((u.vet||0)>=1?2:0)|(u.dying?4:0)|(u.atkT<0.4?8:0)|
-        ((u.vet||0)>=2?16:0)]),
+        ((u.vet||0)>=2?16:0)|(u.back?32:0)]),
       pr:G.projs.map(p=>[p.pid,Math.max(0,PROJ_KINDS.indexOf(p.kind)),
         Math.round(p.x),Math.round(p.y),Math.round(p.ang*100),p.side?1:0]),
       sk:G.strikes.map(k=>[k.side||0,Math.round(k.x),Math.round(k.y),Math.round(k.r),
@@ -519,13 +520,14 @@ function netApplySnap(sn){
     let u=G._umap[uid];
     if(!u){
       u={uid,side,type:TYPE_KEYS[a[1]],s,off,hp,max,cd:9,walk:rand(0,6),lunge:0,
-         dying:(fl&4)?0.001:0,moving:!!(fl&1),kills:0,vet:vetOfFlag(fl),atkT:9,animT:rand(0,9),_ts:s};
+         dying:(fl&4)?0.001:0,moving:!!(fl&1),kills:0,vet:vetOfFlag(fl),back:!!(fl&32),
+         atkT:9,animT:rand(0,9),_ts:s};
       G._umap[uid]=u;
       G.units.push(u);
     }else{
       u._ts=s;u.off=off;u.hp=hp;u.max=max;
       u.type=TYPE_KEYS[a[1]];
-      u.moving=!!(fl&1);u.vet=vetOfFlag(fl);
+      u.moving=!!(fl&1);u.vet=vetOfFlag(fl);u.back=!!(fl&32);
       if((fl&8)&&u.atkT>0.5)u.atkT=0;
       if((fl&4)&&!u.dying)u.dying=0.001;
     }

@@ -75,6 +75,18 @@ function cmdrOf(side){
    （必须定义在 PLACEABLES 之前——下面直接引用了 STRIKE.cost/cd） */
 const STRIKE={cost:260,cd:50,radius:118,waves:3,gap:5,shells:7,shellGap:0.16,
               lead:1.3,dmg:38,splash:62,shellSp:620,lobDist:520};
+/* 空降守备队（王国元帅技能）：3 近战 + 2 远程，落地就摆成前后两排的小阵型。
+   它们只在空降点 leash 范围内活动搜敌，锁不到更远的目标，范围内没敌人就自动归位；
+   永远不推进战线——这是它和常规出兵的根本区别。 */
+const AIRDROP={
+  comp1:['sword','sword','sword','archer','archer'],
+  comp2:['sword2','sword2','sword2','archer2','archer2'],
+  laneM:[0,-24,24],   /* 近战排横向站位 */
+  laneR:[-14,14],     /* 远程排横向站位 */
+  rowGap:24,          /* 近战排在前、远程排在后，各偏离空降点这么远 */
+  leash:120,          /* 离空降点最远能走多远（索敌距离＝leash+自身射程） */
+  homeEps:5,          /* 离归位点这么近就算到家，避免原地抖动 */
+};
 /* 可放置物（strike=区域炮击，airdrop=限时部队，其余为建筑实体） */
 const PLACEABLES={
   strike:{emoji:'🎯',name:'火力覆盖',cost:STRIKE.cost,cd:STRIKE.cd,road:false,strike:true},

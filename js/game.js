@@ -212,6 +212,23 @@ function fire(u,st,tgt,onBase){
   }
 }
 
+/* 守备队走位：朝目标靠但绝不越出空降点 leash 范围；没目标就回到自己的落点。
+   与常规单位不同，这里是双向移动（可能往己方后方走），所以不能复用 dir 那套单向推进逻辑。 */
+function guardStep(u,st,tgt,dt,wSpd){
+  const lo=u.homeS-u.leash, hi=u.homeS+u.leash;
+  const dest=tgt?clamp(tgt.s,lo,hi):u.homeS;
+  const gap=dest-u.s;
+  const sp=st.speed*wSpd*(u.side?1:(RUN?RUN.mods.speed:1));
+  if(Math.abs(gap)>AIRDROP.homeEps){
+    u.s+=Math.sign(gap)*Math.min(Math.abs(gap),sp*dt);
+    u.walk+=dt*st.speed*0.16; u.animT+=dt; u.moving=true;
+    u.back=gap*(u.side?-1:1)<0;   /* 往己方后方走：渲染时要把朝向翻过来，否则会倒着滑行 */
+  }else u.back=false;
+  if(!tgt){                        /* 归队时横向也慢慢回到自己那一格，重新站成阵型 */
+    const od=u.homeOff-u.off;
+    if(Math.abs(od)>0.5)u.off+=Math.sign(od)*Math.min(Math.abs(od),sp*0.6*dt);
+  }
+}
 function updateUnits(dt){
   const us=G.units;
   /* 每帧缓存路径横向位置（含岔路分离），供索敌/阻挡/溅射使用 */
@@ -256,6 +273,8 @@ function updateUnits(dt){
           addFloat(ap.x,ap.y-52,'+'+hAmt,'#7dff9b',14);
           sHeal();
         }
+      }else if(u.guard){
+        guardStep(u,st,null,dt,wSpd);   /* 守备队里的修士也归位，不跟队推进 */
       }else{
         let blocked=false;
         for(const a of us){
@@ -273,17 +292,22 @@ function updateUnits(dt){
       if(G.weather.rangedMul)rngEff*=G.weather.rangedMul;
       if(!u.side)rngEff*=famMod(u.type,'range');
     }
+    /* 守备队的索敌半径＝能走的距离+自身射程，即"只锁定我够得着的目标"。
+       用 rngEff 而不是 st.range，所以沙暴削弱射程时视野会跟着缩。 */
+    const sight=u.guard?u.leash+rngEff:0;
     let tgt=null, tscore=1e9, tds=1e9;
     for(const e of us){
       if(e.side===u.side||e.dying)continue;
       if(rngEff<=50&&Math.abs(e._lat-u._lat)>46)continue; /* 近战不能隔着岔路打 */
       const ds=Math.abs(e.s-u.s);
+      if(sight&&ds>sight)continue;                       /* 太远的锁不上 */
       const score=ds+Math.abs(e._lat-u._lat)*0.3;
       if(score<tscore){tscore=score;tds=ds;tgt=e;}
     }
     const bd=u.side?u.s-55:L-55-u.s;
     let onBase=false, td=tds;
-    if(!tgt||bd<tds){td=bd;tgt=null;onBase=true;}
+    /* 守备队不打城堡：它被拴在空降点附近，本来也够不着，留着只会让它朝城堡空转 */
+    if(!u.guard&&(!tgt||bd<tds)){td=bd;tgt=null;onBase=true;}
     /* 滚桶兵：接敌自爆，范围伤害 */
     if(st.cls==='bomb'&&td<=st.range){
       u.dying=1e-4;
@@ -301,19 +325,20 @@ function updateUnits(dt){
       continue;
     }
     u.moving=false;
+    u.back=false;   /* 每帧重置：否则守备队从"归位中"切到"开打"时会保留反向朝向 */
     if(td<=rngEff){
       if(u.cd<=0){u.cd=st.cd;u.lunge=1;u.atkT=0;fire(u,st,tgt,onBase);}
+    }else if(u.guard){
+      guardStep(u,st,tgt,dt,wSpd);
     }else{
-      if(!u.hold){
-        let blocked=false;
-        for(const a of us){
-          if(a===u||a.side!==u.side||a.dying||UNITS[a.type].cls==='bldg')continue;
-          if(Math.abs(a._lat-u._lat)>=18)continue;
-          const gp=(a.s-u.s)*dir;
-          if(gp>0&&gp<20){blocked=true;break;}
-        }
-        if(!blocked){u.s+=st.speed*wSpd*(u.side?1:(RUN?RUN.mods.speed:1))*dir*dt;u.walk+=dt*st.speed*0.16;u.animT+=dt;u.moving=true;}
+      let blocked=false;
+      for(const a of us){
+        if(a===u||a.side!==u.side||a.dying||UNITS[a.type].cls==='bldg')continue;
+        if(Math.abs(a._lat-u._lat)>=18)continue;
+        const gp=(a.s-u.s)*dir;
+        if(gp>0&&gp<20){blocked=true;break;}
       }
+      if(!blocked){u.s+=st.speed*wSpd*(u.side?1:(RUN?RUN.mods.speed:1))*dir*dt;u.walk+=dt*st.speed*0.16;u.animT+=dt;u.moving=true;}
     }
   }
   for(let i=us.length-1;i>=0;i--)if(us[i].dying>0.45)us.splice(i,1);
@@ -618,16 +643,22 @@ function airdropCore(side,s){
   if(side)G.aiMoney-=P.cost; else G.money-=P.cost;
   G.pcds.airdrop[side]=P.cd*(side?1:(RUN?RUN.mods.turCd:1));
   const era=side?G.aiEra:G.era;
-  const comp=era===2?['sword2','sword2','archer2']:['sword','sword','archer'];
-  comp.forEach((k,i)=>{
-    const st=UNITS[k];
+  const comp=era===2?AIRDROP.comp2:AIRDROP.comp1;
+  const toFoe=side?-1:1;   /* s 空间里朝向敌方的方向 */
+  let nm=0,nr=0;
+  comp.forEach(k=>{
+    const st=UNITS[k], ranged=!!st.proj;
+    /* 近战列在前、远程列在后，各自横向散开——落地即成阵型，不用等它们自己走位 */
+    const lane=(ranged?AIRDROP.laneR[nr++]:AIRDROP.laneM[nm++])+rand(-3,3);
+    const hs=clamp(s+(ranged?-AIRDROP.rowGap:AIRDROP.rowGap)*toFoe,20,L-20);
     const hpMul=(side?(G.stage?G.stage.hpMul:1):(RUN?RUN.mods.hp:1)*famMod(k,'hp'))*1.15;
     const hp=Math.round(st.hp*hpMul);
-    G.units.push({uid:(G.uidSeq=(G.uidSeq||0)+1),side,type:k,
-      s:clamp(s+(i-1)*26*(side?1:-1),20,L-20),
-      off:LANE_SLOTS[i%LANE_SLOTS.length]+rand(-4,4),
+    G.units.push({uid:(G.uidSeq=(G.uidSeq||0)+1),side,type:k,s:hs,off:lane,
       hp,max:hp,cd:rand(0.1,0.3),walk:rand(0,6),lunge:0,dying:0,moving:false,
-      kills:0,vet:0,atkT:9,animT:rand(0,9),hold:true,expireT:P.life});
+      kills:0,vet:0,atkT:9,animT:rand(0,9),
+      /* 守备队标记：只在自己的 homeS/homeOff 附近 leash 范围内活动，不推进战线 */
+      guard:true,homeS:hs,homeOff:lane,leash:AIRDROP.leash,back:false,
+      expireT:P.life});
   });
   const p=pathPos(s);
   addFloat(p.x,p.y-50,'🪂 空降!','#ffd76a',20);
@@ -659,7 +690,7 @@ function placeAt(wx,wy){
     if(P.drop){
       if(pr.s>L-260){toast('⚠️ 离敌方城堡太近');return;}
       airdropCore(0,pr.s);
-      toast('🪂 守备队空降完成，坚守 '+P.life+' 秒');
+      toast('🪂 守备队空降：'+AIRDROP.comp1.length+' 人就地布防 '+P.life+' 秒，在落点附近搜敌，无敌人则归位');
       return;
     }
     buildingPlaceCore(0,ty,pr.s,true);
