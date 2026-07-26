@@ -42,7 +42,7 @@ async function netOpen(code,role){
        sendCmd,sendSnap,sendFx,sendMeta,sendEmote,snapT:0,specSnapT:0};
   /* Trystero 房间是全网状连接，广播天然到达所有人，无需主机中继 */
   onEmote(i=>{
-    if(!G||!G.pvp)return;
+    if(!NET||NET.full||!G||!G.pvp)return;
     const d=(i&&typeof i==='object')?i:{i:i|0};
     if(d.spec){showSpecEmote(d.i|0);return;}
     /* 玩家表情：观众按当前视角归位，玩家则一律显示在对面 */
@@ -56,6 +56,7 @@ async function netOpen(code,role){
     sFlag();
   });
   room.onPeerLeave(id=>{
+    if(!NET)return; /* netLeave() 已置空，但 room.leave() 有约 100ms 拆链窗口，回调仍会触发 */
     const wasRole=NET.roles[id];
     delete NET.roles[id];
     if(NET.specs[id]){
@@ -69,27 +70,49 @@ async function netOpen(code,role){
       if(id!==NET.hostId)return;
       NET.hostId=null;
       if(G&&G.pvp&&!G.over)netSpecEnd('对局已结束（房主离线）');
-      else netLobbyStatus();
+      else{
+        /* 还在大厅等开局时房主跑了：房间已死，给出终局提示而不是继续空等 */
+        NET.full=true;
+        $('pvpPickSec').style.display='none';
+        $('btnPvpStart').style.display='none';
+        $('pvpStatus').textContent='⚠️ 房主已离开房间，观战结束';
+      }
       return;
     }
     if(id!==NET.peer){ /* 不是我的对手（观众/误入者）离开，与对局无关 */
       if(wasRole)netLobbyStatus();
       return;
     }
-    NET.peer=null;
-    if(G&&G.pvp&&!G.over)netShowEnd(true,'对方已断线');
-    else netLobbyStatus();
+    /* 席位释放：对手的选人状态必须一并作废，否则下一个进来的人会被当成“已确认” */
+    NET.peer=null; NET.peerLocked=false; NET.peerCmdr=null; NET.revealed=false;
+    if(G&&G.pvp&&!G.over){
+      /* 房主一旦 G.over 就停发快照，必须先通知观众，否则他们永远卡在最后一帧 */
+      if(NET.isHost){
+        const ids=Object.keys(NET.specs);
+        if(ids.length)try{NET.sendMeta({k:'end',winner:0,r:'对手已断线'},ids);}catch(e){}
+      }
+      netShowEnd(true,'对方已断线');
+    }else netLobbyStatus();
   });
-  /* 观众发来的任何指令一律丢弃 */
+  /* 观众发来的任何指令一律丢弃；被房间拒绝(NET.full)后停止处理一切入站消息 */
   onCmd((c,fromId)=>{
-    if(!NET||!NET.isHost||!G||!G.pvp||G.over)return;
+    if(!NET||NET.full||!NET.isHost||!G||!G.pvp||G.over)return;
     if(NET.specs[fromId]||fromId!==NET.peer)return;
     netApplyCmd(c);
   });
-  onSnap(sn=>{if(NET&&!NET.isHost)netApplySnap(sn);});
-  onFx(f=>{if(NET&&!NET.isHost)netApplyFx(f);});
+  onSnap((sn,fromId)=>{
+    if(!NET||NET.full||NET.isHost)return;
+    if(NET.spectator?(NET.hostId&&fromId!==NET.hostId):(NET.peer&&fromId!==NET.peer))return;
+    netApplySnap(sn);
+  });
+  onFx((f,fromId)=>{
+    if(!NET||NET.full||NET.isHost)return;
+    if(NET.spectator?(NET.hostId&&fromId!==NET.hostId):(NET.peer&&fromId!==NET.peer))return;
+    netApplyFx(f);
+  });
   onMeta((mt,fromId)=>{
-    if(!NET)return;
+    /* NET.full 置位后连 full 自身也不再重入——首条 full 抵达时该标志尚为 false，能正常处理 */
+    if(!NET||NET.full)return;
     if(mt.k==='iam'){
       NET.roles[fromId]=mt.role;
       if(mt.role==='host')NET.hostId=fromId;
@@ -108,6 +131,9 @@ async function netOpen(code,role){
         if(NET.peer&&NET.peer!==fromId){
           try{sendMeta({k:'full'},fromId);}catch(e){}
           return;
+        }
+        if(NET.peer!==fromId){ /* 换人：上一位的选人状态不能继承给新对手 */
+          NET.peerLocked=false; NET.peerCmdr=null; NET.revealed=false;
         }
         NET.peer=fromId;
         sendMeta({k:'hi'},fromId);
@@ -135,7 +161,7 @@ async function netOpen(code,role){
       else if(mt.k==='end'&&fromId===NET.hostId){
         /* 结算方按当前视角归位，否则翻转视角后会宣告错误的一方获胜 */
         const w=NET.specMirror?1-(mt.winner|0):(mt.winner|0);
-        netSpecEnd(w===0?'🔵 蓝方获胜':'🔴 红方获胜');
+        netSpecEnd(mt.r?('对局结束（'+mt.r+'）'):(w===0?'🔵 蓝方获胜':'🔴 红方获胜'));
       }
       return;
     }
@@ -264,6 +290,7 @@ function netLeave(){
   if(G){G.pvp=false;G.spectator=false;}
   document.body.classList.remove('spectating');
   $('specBadge').classList.add('hidden');
+  $('emoteBar').classList.add('hidden'); /* 展开状态会泄漏到下一局 */
   $('foeLabel').textContent='敌军'; /* 观战时被改成 🔴，不还原会一直留在后续对局 */
   $('btnAgain').style.display='';
   $('pvpov').classList.add('hidden');

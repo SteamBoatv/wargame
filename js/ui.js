@@ -549,6 +549,15 @@ $('btnEmote').addEventListener('pointerdown',e=>{
   $('emoteBar').classList.toggle('hidden');
 });
 $('btnSpecFlip').addEventListener('pointerdown',e=>{e.preventDefault();specFlipView();});
+/* 观众的兜底出口：不依赖房主的任何消息也能自行离开 */
+$('btnSpecExit').addEventListener('pointerdown',e=>{
+  e.preventDefault();
+  netLeave();
+  mode='menu';
+  ['gameover','runover','mapov','rewardov','pauseov','pvpov'].forEach(id=>$(id).classList.add('hidden'));
+  $('menu').classList.remove('hidden');
+  sClick();
+});
 $('btnPvpWatch').addEventListener('pointerdown',e=>{
   e.preventDefault();
   if(!NET)return;
