@@ -104,6 +104,7 @@ function damage(e,dmg,bySide,attacker){
       attacker.kills++;
       promoteVet(attacker);
     }
+    teleEvent('kill',e.side?1:0,e.type+'@'+Math.round(e.s));
     sDie();
   }
 }
@@ -161,8 +162,8 @@ function updateFlags(dt){
     }
     if(p>0&&a===0)f.prog=Math.min(1,f.prog+dt/FLAG_TIME);
     else if(a>0&&p===0)f.prog=Math.max(-1,f.prog-dt/FLAG_TIME);
-    if(f.prog>=1&&f.owner!==0){f.owner=0;toast('🚩 占领哨站！收入+'+FLAG_INCOME+'/秒');sFlag();netFx({k:'fc',side:0});}
-    if(f.prog<=-1&&f.owner!==1){f.owner=1;toast('⚠️ 敌军占领了哨站');sFlag();netFx({k:'fc',side:1});}
+    if(f.prog>=1&&f.owner!==0){f.owner=0;toast('🚩 占领哨站！收入+'+FLAG_INCOME+'/秒');sFlag();netFx({k:'fc',side:0});teleEvent('flag',0,Math.round(f.s));}
+    if(f.prog<=-1&&f.owner!==1){f.owner=1;toast('⚠️ 敌军占领了哨站');sFlag();netFx({k:'fc',side:1});teleEvent('flag',1,Math.round(f.s));}
   }
 }
 function hitBase(side,dmg){
@@ -508,6 +509,7 @@ function aiPick(){
 function update(dt){
   G.t+=dt;
   frontTick();
+  teleTick();
   let wy0=0,wy1=0;
   for(const u of G.units)
     if(!u.dying&&u.type==='b_workshop'){
@@ -594,6 +596,7 @@ function updateWeather(dt){
 
 /* ---------------- 战场中立事件 ---------------- */
 function triggerEvent(type){
+  teleEvent('evt',type);
   if(type==='gold'){
     const s=rand(0.35,0.65)*L;
     G.piles.push({s,amt:220});
@@ -753,6 +756,7 @@ function buildingPlaceCore(side,ty,s,localToast,slk){
     kills:0,vet:0,atkT:9,animT:0});
   if(localToast)toast('🔨 '+P.name+'建造完成'+(ty==='workshop'?'（此位置产量 +'+Math.round(wsYield({side,s}))+'/秒）':''));
   sBoom();
+  teleCmd(side,'place_'+ty,Math.round(s));
   return true;
 }
 /* 空降守备队：一支不推进的临时部队，随时代变强，限时后消失 */
@@ -787,6 +791,7 @@ function airdropCore(side,s,slk){
   addFloat(p.x,p.y-50,'🪂 空降!','#ffd76a',20);
   G.booms.push({x:p.x,y:p.y,t:0});
   sSpawn();
+  teleCmd(side,'airdrop',Math.round(s));
   return true;
 }
 /* ---------------- 反应堆资产化：升级 / 主动回收（均主机权威） ---------------- */
@@ -810,6 +815,7 @@ function wsUpgradeCore(side,uid){
   const p=unitPos(u);
   addFloat(p.x,p.y-58,'⬆️ 反应堆 Lv'+u.wlv,'#ffd76a',16);
   sBoom();
+  teleCmd(side,'wsup',u.wlv);
   return true;
 }
 function wsRecycleCore(side,uid){
@@ -820,6 +826,7 @@ function wsRecycleCore(side,uid){
   if(G.pcds.workshop[side]>0)return false;
   G.pcds.workshop[side]=PLACEABLES.workshop.cd*(side?1:(RUN?RUN.mods.turCd:1));
   u.recT=WS_SALVAGE.channel; /* 引导期间停产；受击即打断（见 damage 入口），时机是真博弈 */
+  teleCmd(side,'wsrec',u.wlv||1);
   return true;
 }
 function placeAt(wx,wy){
@@ -887,6 +894,7 @@ function strikeCore(side,wx,wy,localToast){
   if(localToast)toast('🎯 火力覆盖已呼叫：'+STRIKE.waves+' 轮，每轮间隔 '+STRIKE.gap+' 秒');
   addFloat(wx,wy-30,'🎯 坐标已锁定','#ff9040',18);
   sFlag();
+  teleCmd(side,'strike',pp?Math.round(pp.s):0);
   return true;
 }
 function fireStrikeShell(k){

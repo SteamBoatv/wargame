@@ -92,6 +92,7 @@ function buy(k){
   if(G.pvp&&NET&&!NET.isHost){netSendBuy(k);sClick();return;}
   G.money-=c;
   G.queue.push({type:k,t:UNITS[k].build/(RUN?RUN.mods.build:1)});
+  teleCmd(0,'buy',k);
   sClick();
 }
 function buyIncome(){
@@ -100,6 +101,7 @@ function buyIncome(){
   if(G.money<c)return;
   if(G.pvp&&NET&&!NET.isHost){netSendIncome();sClick();return;}
   G.money-=c; G.incomeLvl++; G.income+=INCOME_STEP;
+  teleCmd(0,'inc',G.incomeLvl);
   addFloat(BASE0.x,BASE0.y-130,'⛏️ 收入+'+INCOME_STEP);
   sClick();
 }
@@ -165,6 +167,7 @@ function tryEvolve(){
   if(G.pvp&&NET&&!NET.isHost){netSendEvolve();toast('👑 进化指令已发送');sClick();return;}
   if(G.pvp&&NET&&NET.isHost)NET.sendFx({k:'evh'});
   G.money-=EVOLVE_COST; G.era=2; G.flash=1;
+  teleCmd(0,'evolve');
   buildUnitButtons();
   showBanner('👑 时代进化!');
   toast('👑 王国时代：黑铁精锐军团已就位');

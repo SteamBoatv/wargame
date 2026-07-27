@@ -408,6 +408,7 @@ function netStartCommon(def,events,isHost,myCmdr,foeCmdr){
   G.uidSeq=0;G.pidSeq=0;
   mode='play';
   ['pvpov','menu','mapov'].forEach(id=>$(id).classList.add('hidden'));
+  if(isHost)teleStart(stage.cmdr0,stage.cmdr1); /* 遥测只在主机端录（权威模拟含双方全量） */
   toast('⚔️ 对战开始！你是蓝方（下方），摧毁对方城堡获胜');
   keepAwake();
   $('wTag').textContent='';
@@ -426,15 +427,18 @@ function netApplyCmd(c){
     if(G.aiMoney<st.cost||G.aiQueue.length>=QUEUE_MAX)return;
     G.aiMoney-=st.cost;
     G.aiQueue.push({type:k,t:st.build});
+    teleCmd(1,'buy',k);
   }else if(c.a==='i'){
     if(!cmdrOf(1).mining)return; /* 指挥官门控：机械军团没有挖矿 */
     if(G.aiIncomeLvl>=INCOME_MAX_LVL)return;
     const cost=incomeCost(G.aiIncomeLvl);
     if(G.aiMoney<cost)return;
     G.aiMoney-=cost;G.aiIncomeLvl++;G.aiIncome+=INCOME_STEP;
+    teleCmd(1,'inc',G.aiIncomeLvl);
   }else if(c.a==='e'){
     if(G.aiEra!==1||G.aiXp<EVOLVE_XP||G.aiMoney<EVOLVE_COST)return;
     G.aiMoney-=EVOLVE_COST;G.aiEra=2;G.flash=1;
+    teleCmd(1,'evolve');
     toast('⚠️ 对方进化到了王国时代！');
     sEvolve();
     if(NET)NET.sendFx({k:'ev'});
@@ -794,6 +798,7 @@ function updateEmoteBtn(){
 
 /* ---- 结算 ---- */
 function netShowEnd(won,reason){
+  teleEnd(won,reason); /* 客机 TELE 恒为 null，内部自跳过 */
   if(typeof hideWsMenu==='function')hideWsMenu(); /* 结算面板 z 序在其上，但 400ms 轮询期内按钮仍可点 */
   clearTimeout(spdAskTimer);
   $('spdAsk').classList.add('hidden');
