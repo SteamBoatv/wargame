@@ -39,6 +39,18 @@ canvas.bi{width:27px;height:27px;image-rendering:pixelated}
 .diffs{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
 .obtn{font-size:16px;font-weight:800;padding:8px 18px;border:10px solid transparent;border-image:url('../assets/ts/ui_button.png') 47 45 fill stretch;image-rendering:pixelated;background:none;color:#fff;text-shadow:0 2px 0 rgba(10,40,50,.55);touch-action:manipulation;cursor:pointer}
 .obtn:active{transform:scale(.96)}
+/* 单人封存态：整段灰显，按钮保留可点（点击只弹提示，见 ui.js 的 SOLO_LOCKED 拦截） */
+#soloSec.locked{opacity:.45;filter:saturate(.35)}
+#soloSec.locked .obtn{cursor:not-allowed}
+#soloSec.locked .obtn:active{transform:none}
+#soloNote{font-size:13px;color:#ffd76a}
+/* 反应堆资产菜单：轻点己方反应堆弹出，固定在建造栏上方居中 */
+#wsMenu{position:fixed;left:50%;transform:translateX(-50%);bottom:150px;display:flex;gap:8px;
+  align-items:center;background:rgba(24,34,44,.92);border-radius:12px;padding:7px 12px;
+  z-index:9} /* 必须低于 .overlay(10)：结算/菜单弹出时要压住它 */
+#wsMenu.hidden{display:none}
+#wsMenu span{font-size:13px;color:#ffd76a;font-weight:700;text-shadow:0 1px 0 rgba(0,0,0,.6);white-space:nowrap}
+#wsMenu .obtn.dis{opacity:.45;pointer-events:none}
 .panel{border:16px solid transparent;border-image:url('../assets/ts/ui_paper.png') 44 52 fill stretch;image-rendering:pixelated;padding:4px 12px;max-width:min(92vw,640px);max-height:88vh;overflow-y:auto;display:flex;flex-direction:column;align-items:center;gap:10px;color:#4a3418}
 .panel h1{color:#3d2c16}
 .panel p{color:#6a4c26}

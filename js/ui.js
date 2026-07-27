@@ -460,6 +460,7 @@ function showRunEnd(win){
 }
 $('btnRunAgain').addEventListener('pointerdown',e=>{
   e.preventDefault();
+  if(SOLO_LOCKED){$('runover').classList.add('hidden');$('menu').classList.remove('hidden');mode='menu';return;}
   newRun(RUN?RUN.diffKey:'normal');
   showMap();
 });
@@ -472,6 +473,7 @@ $('btnRunMenu').addEventListener('pointerdown',e=>{
 document.querySelectorAll('#menu [data-diff]').forEach(b=>{
   b.addEventListener('pointerdown',e=>{
     e.preventDefault();
+    if(SOLO_LOCKED){toast('🚧 单人远征封存改造中，点上方「好友对战」开一局吧');return;}
     newRun(b.dataset.diff);
     RUN.cmdr=selCmdr;
     $('menu').classList.add('hidden');
@@ -479,9 +481,11 @@ document.querySelectorAll('#menu [data-diff]').forEach(b=>{
     sClick(); startMusic();
   });
 });
+if(SOLO_LOCKED)$('soloSec').classList.add('locked'); else $('soloNote').style.display='none';
 $('btnAgain').addEventListener('pointerdown',e=>{
   e.preventDefault();
   $('gameover').classList.add('hidden');
+  if(SOLO_LOCKED){$('menu').classList.remove('hidden');mode='menu';return;}
   newRun(RUN?RUN.diffKey:'normal');
   showMap();
 });
@@ -594,4 +598,81 @@ document.addEventListener('visibilitychange',()=>{
   }else if(!muted&&mode==='play'){
     startMusic();
   }
+});
+
+/* ---------------- 反应堆资产菜单：轻点自己的反应堆弹出升级/回收 ---------------- */
+let wsSelUid=null,wsMenuTimer=null;
+function tryPickWorkshop(cx,cy){
+  if(!G||mode!=='play'||paused||G.over||G.spectator)return;
+  if(!cmdrOf(0).place||!cmdrOf(0).place.includes('workshop'))return;
+  const w=screenToWorld(cx,cy);
+  let best=null,bd=70*70;
+  for(const u of G.units){
+    if(u.side!==0||u.dying||u.type!=='b_workshop')continue;
+    const p=unitPos(u);
+    const d=(p.x-w.x)*(p.x-w.x)+(p.y-40-w.y)*(p.y-40-w.y); /* 命中区取楼体中部 */
+    if(d<bd){bd=d;best=u;}
+  }
+  if(best){wsSelUid=best.uid;showWsMenu();}
+  else hideWsMenu();
+}
+function wsSelUnit(){
+  if(wsSelUid===null||!G)return null;
+  for(const u of G.units)
+    if(u.uid===wsSelUid&&!u.dying&&u.type==='b_workshop'&&u.side===0)return u;
+  return null;
+}
+function showWsMenu(){
+  $('wsMenu').classList.remove('hidden');
+  refreshWsMenu();
+  if(!wsMenuTimer)wsMenuTimer=setInterval(refreshWsMenu,400);
+}
+function hideWsMenu(){
+  wsSelUid=null;wsRecArm=0;
+  $('wsMenu').classList.add('hidden');
+  if(wsMenuTimer){clearInterval(wsMenuTimer);wsMenuTimer=null;}
+}
+let wsRecArm=0; /* 回收两段确认的解锁截止时间（performance.now 毫秒） */
+function refreshWsMenu(){
+  const u=wsSelUnit();
+  if(!u||!G||G.over||mode!=='play'||paused||G.spectator){hideWsMenu();return;}
+  const lv=u.wlv||1;
+  $('wsInfo').textContent='🏭 反应堆 Lv'+lv+(u.recT?'（回收中）':'');
+  const up=$('btnWsUp'),rec=$('btnWsRec');
+  if(lv>=WS_MAX){up.textContent='⬆️ 已满级';up.classList.add('dis');}
+  else{
+    const cost=WS_UP[lv+1].cost;
+    up.textContent='⬆️ 升级 '+cost+'💰';
+    up.classList.toggle('dis',G.money<cost||G.pcds.workshop[0]>0||!!u.recT);
+  }
+  const back=Math.round(wsInvOf(lv)*WS_SALVAGE.recycle);
+  if(performance.now()>wsRecArm)rec.textContent='♻️ 回收 +'+back+'💰';
+  rec.classList.toggle('dis',!!u.recT||G.pcds.workshop[0]>0);
+}
+const wsGate=()=>{ /* 与 buy/tryEvolve 同一套操作门控 */
+  if(!G||mode!=='play'||paused||G.over||G.spectator){hideWsMenu();return null;}
+  const u=wsSelUnit(); if(!u)hideWsMenu();
+  return u;
+};
+$('btnWsUp').addEventListener('pointerdown',e=>{
+  e.preventDefault();e.stopPropagation();
+  const u=wsGate(); if(!u)return;
+  if(G.pvp&&NET&&!NET.isHost){NET.sendCmd({a:'wu',u:u.uid});toast('⬆️ 升级指令已发送');}
+  else if(!wsUpgradeCore(0,u.uid))toast('⚠️ 金币不足或冷却中');
+  refreshWsMenu();sClick();
+});
+$('btnWsRec').addEventListener('pointerdown',e=>{
+  e.preventDefault();e.stopPropagation();
+  const u=wsGate(); if(!u)return;
+  /* 两段确认：回收不可逆且按钮挨着升级键，手机上误触一次 Lv3 就是三百金蒸发 */
+  if(performance.now()>wsRecArm){
+    wsRecArm=performance.now()+2000;
+    $('btnWsRec').textContent='♻️ 确认回收？';
+    sClick();
+    return;
+  }
+  wsRecArm=0;
+  if(G.pvp&&NET&&!NET.isHost){NET.sendCmd({a:'wr',u:u.uid});toast('♻️ 回收指令已发送');}
+  else if(!wsRecycleCore(0,u.uid))toast('⚠️ 回收失败：建造冷却中');
+  hideWsMenu();sClick();
 });

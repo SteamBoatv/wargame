@@ -1,4 +1,7 @@
 'use strict';
+/* 单人远征封存开关：联机模式打磨成熟前，单人入口只展示、不可开局。
+   菜单灰显与三处开局拦截（选难度/再来一局/再次远征）都只读这一个开关，放开时改 false 即可。 */
+const SOLO_LOCKED=true;
 /* ---------------- 兵种与数值 ---------------- */
 const UNITS={
   /* ---- 时代 I 蓝色骑士团 ---- */
@@ -86,7 +89,15 @@ const AIRDROP={
   rowGap:24,          /* 近战排在前、远程排在后，各偏离空降点这么远 */
   leash:120,          /* 离空降点最远能走多远（索敌距离＝leash+自身射程） */
   homeEps:5,          /* 离归位点这么近就算到家，避免原地抖动 */
+  fleeLeash:200,      /* 炮击杀伤半径(118+62)＞常规拴绳：预警时临时放宽到这个值让守备队跑出圈 */
 };
+/* 前线放置规则：物理放置物（建筑+空降）只能部署在"己方前线+余量"以内。
+   前线 = 己方存活机动单位与建筑中最靠前者——建筑刻意计入，工程师用工事一步步把阵地拱前；
+   取 8 秒滑窗内的最差值：单个敢死兵冲进深处拉不动前线，要在敌方火力下站满 8 秒才算数。
+   floor=近半场保底（刚被团灭时最需要放防御建筑，不能把人锁在家门口）；
+   dropCap=空降距敌方城堡的额外硬限（守备队索敌半径 310px，再近就能蹲对方出兵点）；
+   eps=主机校验远端指令的从宽量，抵消快照延迟与镜像路径的采样差。 */
+const FRONT={margin:100,window:8,floor:0.45,dropCap:420,eps:40};
 /* 可放置物（strike=区域炮击，airdrop=限时部队，其余为建筑实体） */
 const PLACEABLES={
   strike:{emoji:'🎯',name:'火力覆盖',cost:STRIKE.cost,cd:STRIKE.cd,road:false,strike:true},
@@ -95,9 +106,25 @@ const PLACEABLES={
   tower:{emoji:'🗼',name:'激光塔',cost:220,cd:35,road:true,maxAlive:2,unit:'b_tower'},
   workshop:{emoji:'🏭',name:'反应堆',cost:200,cd:25,road:true,maxAlive:3,unit:'b_workshop'},
 };
-function wsYield(u){ /* 工坊产量：越靠近敌方越高 2~6/秒 */
+/* 反应堆资产化：可升级 + 有残值。
+   升级挖出对标元帅挖矿的投资深度（200/450/850 金，修"600 金封顶没有后期"）；
+   升级与新建共用 workshop 冷却——经济动作被限频，被拆的真实代价里含时间惩罚。
+   残值：被拆返还 kill 比例、主动引导 channel 秒回收返还 recycle 比例——
+   前线失守不再是全损，这是"敢把堆立在前线"的底气，也是高风险高回报的下行保护。 */
+/* 倍率经统一口径校准（净军费,对手=利润最优元帅,300s/600s）：
+   后场零风险≈小亏9%、中场守得住≈小赚12%、前压头奖≈27%、每座只活120s则元帅反超——
+   风险梯度必须四档同时成立，改倍率前先跑 econ_final.py 复核 */
+const WS_UP=[null,
+  {cost:200,mul:1.0,hp:300},
+  {cost:250,mul:1.7,hp:450},
+  {cost:400,mul:2.3,hp:600}];
+const WS_MAX=WS_UP.length-1;
+const WS_SALVAGE={kill:0.55,recycle:0.65,channel:3};
+const wsInvOf=lv=>{let s=0;for(let i=1;i<=(lv||1);i++)s+=WS_UP[i].cost;return s;};
+function wsYield(u){ /* 反应堆产量：位置基础 2~6/秒 × 等级倍率；回收引导中停产 */
+  if(u.recT)return 0;
   const f=u.side?1-u.s/L:u.s/L;
-  return 2+4*clamp((f-0.08)/0.84,0,1);
+  return (2+4*clamp((f-0.08)/0.84,0,1))*WS_UP[u.wlv||1].mul;
 }
 const BASE_HP=900, KILL_REWARD=0.35, QUEUE_MAX=5, INCOME_STEP=3, INCOME_MAX_LVL=10;
 const EVOLVE_XP=300, EVOLVE_COST=500, FLAG_INCOME=3, FLAG_RANGE=90, FLAG_TIME=3;

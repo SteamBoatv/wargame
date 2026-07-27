@@ -121,13 +121,15 @@ function drawBuilding(u,p,st){
     ctx.fillStyle=u.side?'#ff5a5a':'#43d675';
     ctx.fillRect(p.x-w/2,p.y-by+1,w*r,h);
     if(u.type==='b_workshop'){
-      const t='+'+Math.round(wsYield(u))+'/秒';
+      /* 等级角标敌我双方都可见——对手要能看出哪座是高价值目标，赌注才成立 */
+      const lv=u.wlv||1;
+      const t=u.recT?'♻️ 回收中':('+'+Math.round(wsYield(u))+'/秒'+(lv>1?(lv===2?' Ⅱ':' Ⅲ'):''));
       const ty=p.y-by-14;
       ctx.font='bold 13px system-ui,sans-serif';
       ctx.textAlign='center';ctx.textBaseline='middle';
       ctx.lineWidth=3;ctx.strokeStyle='rgba(20,20,20,.7)';
       ctx.strokeText(t,p.x,ty);
-      ctx.fillStyle='#ffd76a';ctx.fillText(t,p.x,ty);
+      ctx.fillStyle=u.recT?'#9fe8a0':(lv>=3?'#ffb347':'#ffd76a');ctx.fillText(t,p.x,ty);
     }
   }
 }
@@ -546,11 +548,26 @@ function draw(){
       ctx.moveTo(placePos.x,placePos.y-30); ctx.lineTo(placePos.x,placePos.y+30);
       ctx.stroke();
     }else{
-      /* 建筑虚影：吸附到道路中心，绿=可建 红=不可建 */
+      /* 建筑虚影：吸附到道路中心，绿=可建 红=不可建（含前线规则） */
       const P=PLACEABLES[placingType];
       const pr=nearestPath(placePos.x,placePos.y);
-      const ok=pr&&pr.d<=76*pr.wf&&pr.sep<=5&&pr.s<=L-260;
+      const ok=pr&&pr.d<=76*pr.wf&&pr.sep<=5&&pr.s<=L-260&&placeAllowed(0,pr.s,!!P.drop);
       const gp=pr?pathPos(pr.s):placePos;
+      /* 前线上限界标：横跨道路的虚线，玩家一眼看到"最远能放到哪"。
+         空降要取与 dropCap 的较小值——元帅唯一的放置物不能看一条错的线 */
+      {
+        const rawLim=P.drop?Math.min(placeLimitS(0),L-FRONT.dropCap):placeLimitS(0);
+        const lim=Math.max(12,Math.min(L-12,rawLim));
+        const lp=pathPos(lim), lp2=pathPos(Math.max(0,lim-10));
+        const dx=lp.x-lp2.x, dy=lp.y-lp2.y, dl=Math.hypot(dx,dy)||1;
+        const nx=-dy/dl, ny=dx/dl, hw=52*(lp.wf||1);
+        ctx.strokeStyle='rgba(120,220,255,.9)';ctx.lineWidth=3;ctx.setLineDash([9,7]);
+        ctx.beginPath();ctx.moveTo(lp.x-nx*hw,lp.y-ny*hw);ctx.lineTo(lp.x+nx*hw,lp.y+ny*hw);ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.font=em(13);ctx.textAlign='center';ctx.textBaseline='middle';
+        ctx.fillStyle='rgba(160,230,255,.95)';
+        ctx.fillText('⚑ 前线上限',lp.x+nx*hw*1.15,lp.y+ny*hw*1.15-10);
+      }
       ctx.globalAlpha=0.65;
       ctx.font=em(46);ctx.textAlign='center';ctx.textBaseline='middle';
       ctx.fillText(P.emoji,gp.x,gp.y-20);

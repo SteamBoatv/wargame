@@ -69,23 +69,38 @@ function bumpStreak(){
 
 function damage(e,dmg,bySide,attacker){
   if(e.dying)return;
+  /* 受击打断回收引导（不退款、恢复产出）：否则"看到红圈点回收"3 秒内要打出 600 伤害
+     才拦得住，火力覆盖单轮期望仅 203——回收会变成敌方火力下的无风险撤资 */
+  if(e.recT&&UNITS[e.type].cls==='bldg')e.recT=0;
   e.hp-=dmg;
   if(e.hp<=0){
     e.dying=1e-4;
-    const c=UNITS[e.type].cost;
+    /* 拆建筑只捡废料：赏金减半、零经验、零军衔、零连斩、双倍赏金不生效。
+       建筑的价值主要在"断掉对方产出"，全额悬赏是重复计价——旧规则下拆全套建筑
+       等于白送对手一次完整进化，是元帅免疫、只有工程师在交的单向税。 */
+    const isBldg=UNITS[e.type].cls==='bldg';
+    const c=(isBldg&&e.type==='b_workshop')?wsInvOf(e.wlv):UNITS[e.type].cost; /* 税基=实际投资额 */
     const km=bySide===0?cmdrOf(0).killMult:(G.pvp?cmdrOf(1).killMult:KILL_REWARD);
-    let reward=Math.round(c*km);
-    if(G.bountyT>0)reward*=2;
+    let reward=Math.round(c*km*(isBldg?0.5:1));
+    if(G.bountyT>0&&!isBldg)reward*=2;
     const p=unitPos(e);
     if(bySide===0){
-      G.money+=reward; G.xp+=c*0.25;
+      G.money+=reward; if(!isBldg)G.xp+=c*0.25;
       addFloat(p.x,p.y-46,'+'+reward+'💰');
-      bumpStreak(); sCoin();
+      if(!isBldg){bumpStreak(); sCoin();}
     }else if(bySide===1){
       G.aiMoney+=reward;
-      if(G.per.evolve)G.aiXp+=c*0.25;
+      if(G.per.evolve&&!isBldg)G.aiXp+=c*0.25;
     }
-    if(attacker&&!attacker.dying){
+    /* 反应堆残值：被拆返还所有者部分投资（bySide=2 的天灾击杀同样返还）。
+       side1 的所有者是客机玩家：飘字不进快照，必须走 fx 通道补回执，
+       否则"前线失守不再全损"这个核心反馈对客机玩家完全隐形 */
+    if(isBldg&&e.type==='b_workshop'&&!e.recycled){
+      const back=Math.round(wsInvOf(e.wlv)*WS_SALVAGE.kill);
+      if(e.side){G.aiMoney+=back; netFx({k:'ts',side:1,x:' 反应堆残值 ♻️+'+back+'💰'});}
+      else{G.money+=back; addFloat(p.x,p.y-24,'♻️+'+back,'#9fe8a0',15);}
+    }
+    if(attacker&&!attacker.dying&&!isBldg){
       attacker.kills++;
       promoteVet(attacker);
     }
@@ -214,9 +229,36 @@ function fire(u,st,tgt,onBase){
 
 /* 守备队走位：朝目标靠但绝不越出空降点 leash 范围；没目标就回到自己的落点。
    与常规单位不同，这里是双向移动（可能往己方后方走），所以不能复用 dir 那套单向推进逻辑。 */
+/* 炮击杀伤半径(118+62=180)＞拴绳 120：不放宽的话守备队被圈住只能站着挨三轮
+   （260 金火力覆盖无反制全灭 250 金空降）。预警圈盖到头上时临时放宽拴绳、朝圈外撤。
+   三条审查教训都焊在这里：①撤离方向固定朝己方后方（按圆心哪侧算会被对手用圆心劈阵型，
+   把近战排推向敌方火力网）；②目标点一旦选定就粘滞到该次炮击结束（判定阈值和目标点只差
+   10px，无粘滞会在圈边界 60Hz 抖动翻面，还经快照位 32 传给客机）；③己方炮击不触发撤离 */
+function guardFleeDest(u){
+  if(u.fleeK){
+    if(G.strikes.includes(u.fleeK))return u.fleeD;
+    u.fleeK=null;
+  }
+  for(const k of G.strikes){
+    if(k.side===u.side)continue;
+    if(k.pd===undefined||k.pd>k.r+70)continue;
+    if(Math.abs(u.s-k.ps)>=k.r+70)continue;
+    const away=u.side?1:-1, lo=u.homeS-AIRDROP.fleeLeash, hi=u.homeS+AIRDROP.fleeLeash;
+    let dest=clamp(k.ps+away*(k.r+90),lo,hi);
+    if(Math.abs(dest-k.ps)<k.r+70){ /* 后方被拴绳拦在圈里：改走另一侧逃生 */
+      const alt=clamp(k.ps-away*(k.r+90),lo,hi);
+      if(Math.abs(alt-k.ps)>Math.abs(dest-k.ps))dest=alt;
+    }
+    u.fleeK=k; u.fleeD=dest;
+    return dest;
+  }
+  return null;
+}
 function guardStep(u,st,tgt,dt,wSpd){
-  const lo=u.homeS-u.leash, hi=u.homeS+u.leash;
-  const dest=tgt?clamp(tgt.s,lo,hi):u.homeS;
+  const flee=guardFleeDest(u);
+  const leash=flee!==null?AIRDROP.fleeLeash:u.leash;
+  const lo=u.homeS-leash, hi=u.homeS+leash;
+  const dest=flee!==null?clamp(flee,lo,hi):(tgt?clamp(tgt.s,lo,hi):u.homeS);
   const gap=dest-u.s;
   const sp=st.speed*wSpd*(u.side?1:(RUN?RUN.mods.speed:1));
   if(Math.abs(gap)>AIRDROP.homeEps){
@@ -326,7 +368,11 @@ function updateUnits(dt){
     }
     u.moving=false;
     u.back=false;   /* 每帧重置：否则守备队从"归位中"切到"开打"时会保留反向朝向 */
-    if(td<=rngEff){
+    /* 撤离必须先于开火判定：否则对手用廉价单位贴脸（td<=rngEff 恒成立）就能把守备队
+       钉在开火分支里站着挨完三轮炮——那正是这套撤离逻辑要修的场景 */
+    if(u.guard&&guardFleeDest(u)!==null){
+      guardStep(u,st,tgt,dt,wSpd);
+    }else if(td<=rngEff){
       if(u.cd<=0){u.cd=st.cd;u.lunge=1;u.atkT=0;fire(u,st,tgt,onBase);}
     }else if(u.guard){
       guardStep(u,st,tgt,dt,wSpd);
@@ -461,9 +507,28 @@ function aiPick(){
 
 function update(dt){
   G.t+=dt;
+  frontTick();
   let wy0=0,wy1=0;
   for(const u of G.units)
-    if(!u.dying&&u.type==='b_workshop'){if(u.side)wy1+=wsYield(u);else wy0+=wsYield(u);}
+    if(!u.dying&&u.type==='b_workshop'){
+      if(u.recT){ /* 回收引导：完成后消散并返还残值，不给对手任何奖励 */
+        u.recT-=dt;
+        if(u.recT<=0){
+          u.recycled=true; u.dying=1e-4;
+          const back=Math.round(wsInvOf(u.wlv)*WS_SALVAGE.recycle);
+          /* 飘字只给本机所有者；对手的回收金额不该白送给主机（那是对方的经济情报），
+             客机所有者走 fx 回执（飘字不进快照） */
+          if(u.side){G.aiMoney+=back; netFx({k:'ts',side:1,x:' 反应堆回收 ♻️+'+back+'💰'});}
+          else{
+            G.money+=back;
+            const rp=unitPos(u);
+            addFloat(rp.x,rp.y-40,'♻️ +'+back,'#9fe8a0',16);
+          }
+        }
+        continue;
+      }
+      if(u.side)wy1+=wsYield(u);else wy0+=wsYield(u);
+    }
   G.money+=(G.income+FLAG_INCOME*ownedFlags(0)+wy0)*dt;
   G.aiMoney+=(G.aiIncome+FLAG_INCOME*ownedFlags(1)+wy1)*dt;
   updQueue(G.queue,dt,0);
@@ -540,15 +605,17 @@ function triggerEvent(type){
   }else if(type==='meteor'){
     toast('☄️ 陨石雨来袭：双方阵线遭到轰击！');
     netFx({k:'tn',x:'☄️ 陨石雨来袭：双方阵线遭到轰击！'});
+    /* 陨石只轰"阵线"不轰固定资产：建筑走不了位躲不开，会变成只砸工程师的单向天灾税；
+       落点质心也同步排除建筑，否则免疫的建筑群会把弹着区拉向围攻它的部队 */
     let cs=L/2,n=1;
-    for(const u of G.units)if(!u.dying){cs+=u.s;n++;}
+    for(const u of G.units)if(!u.dying&&UNITS[u.type].cls!=='bldg'){cs+=u.s;n++;}
     cs/=n;
     for(let i=0;i<4;i++){
       const s=clamp(cs+rand(-260,260),80,L-80);
       const p=pathPos(s);
       G.booms.push({x:p.x+rand(-40,40),y:p.y+rand(-30,30),t:-i*0.25});
       for(const e of G.units){
-        if(e.dying)continue;
+        if(e.dying||UNITS[e.type].cls==='bldg')continue;
         if(Math.abs(e.s-s)<=70)damage(e,40,2,null);
       }
     }
@@ -598,6 +665,7 @@ function togglePlace(ty){
   if(placing&&placingType===ty){placing=false;placePos=null;toast('已取消部署');return;}
   const P=PLACEABLES[ty];
   if(G.pcds[ty][0]>0||G.money<P.cost)return;
+  if(typeof hideWsMenu==='function')hideWsMenu(); /* 放置模式下菜单会挡屏幕底部中央 */
   placing=true; placingType=ty; placePos=null;
   toast(P.strike?('🎯 按住拖动圈定打击区域，松手呼叫火力，再点按钮取消')
                 :('🎯 按住拖动选位，松手部署'+P.name+(P.road?'（必须建在道路上）':'')+'，再点按钮取消'));
@@ -618,28 +686,83 @@ function countBldg(side,unitType){
   for(const u of G.units)if(u.side===side&&!u.dying&&u.type===unitType)n++;
   return n;
 }
-function buildingPlaceCore(side,ty,s,localToast){
+/* ---------------- 前线追踪与放置校验（规则说明见 data.js 的 FRONT） ---------------- */
+function frontInstant(side){
+  let m=side?L:0;
+  for(const u of G.units){
+    if(u.side!==side||u.dying||u.guard)continue;
+    m=side?Math.min(m,u.s):Math.max(m,u.s);
+  }
+  return m;
+}
+/* 主机在 update()、客机在 netGuestTick() 里各自喂样本；G.front 懒初始化兼容旧存局 */
+function frontTick(){
+  if(!G.front)G.front={h:[[],[]],lt:G.t};
+  /* 客机切后台再回来时 G.t 会被快照一次性拉表——按 G.t 裁剪会把整个滑窗清空、
+     退化成瞬时值（界标随即偏乐观 8 秒）。检测到跳变就平移历史，不丢样本 */
+  const jump=G.t-G.front.lt;
+  if(Math.abs(jump)>1)for(const h of G.front.h)for(const e of h)e.t+=jump;
+  G.front.lt=G.t;
+  for(let side=0;side<2;side++){
+    const h=G.front.h[side];
+    h.push({t:G.t,v:frontInstant(side)});
+    while(h.length&&h[0].t<G.t-FRONT.window)h.shift();
+  }
+}
+function frontSmooth(side){
+  const h=G.front&&G.front.h[side];
+  if(!h||!h.length)return frontInstant(side);
+  let m=h[0].v;
+  for(const e of h)m=side?Math.max(m,e.v):Math.min(m,e.v);
+  return m;
+}
+/* slk 也要作用于全部静态边界：主客各自用自己的路径表把坐标量化到 24px 栅格，
+   同一物理点两端算出的 s 实测最大差 ~24px——"静态公式双端一致"并不成立，
+   不从宽的话客机在保底/硬限边缘的合法放置会被主机随机驳回 */
+function placeLimitS(side,slk){
+  const f=frontSmooth(side), m=FRONT.margin+(slk||0), e=slk||0;
+  return side?Math.max(260-e,Math.min(f-m,L-FRONT.floor*L-e))
+             :Math.min(L-260+e,Math.max(f+m,FRONT.floor*L+e));
+}
+function nearFlagS(s){
+  for(const f of G.flags)if(Math.abs(f.s-s)<=FLAG_RANGE)return true;
+  return false;
+}
+function placeAllowed(side,s,drop,slk){
+  const e=slk||0;
+  /* dropCap 是无条件硬限，哨站旗也不豁免——世界生成的兜底会把旗放到 0.8L，
+     豁免它的话守备队索敌圈（310px）就能盖住对方出兵点 */
+  if(drop&&(side?s<FRONT.dropCap-e:s>L-FRONT.dropCap+e))return false;
+  const lim=placeLimitS(side,slk);
+  if(side?s<lim:s>lim)return !!drop&&nearFlagS(s); /* 空降在哨站旗附近豁免：抢旗翻盘保留 */
+  return true;
+}
+function buildingPlaceCore(side,ty,s,localToast,slk){
   const P=PLACEABLES[ty], ut=P.unit, st=UNITS[ut];
   const money=side?G.aiMoney:G.money;
-  if(money<P.cost||G.pcds[ty][side]>0)return;
-  if(countBldg(side,ut)>=P.maxAlive){if(localToast)toast('⚠️ '+P.name+'最多同时存在 '+P.maxAlive+' 座');return;}
-  if(side===0&&s>L-260){if(localToast)toast('⚠️ 离敌方城堡太近');return;}
-  if(side===1&&s<260)return;
+  if(money<P.cost||G.pcds[ty][side]>0)return false;
+  if(countBldg(side,ut)>=P.maxAlive){if(localToast)toast('⚠️ '+P.name+'最多同时存在 '+P.maxAlive+' 座');return false;}
+  if(side===0&&s>L-260+(slk||0)){if(localToast)toast('⚠️ 离敌方城堡太近');return false;}
+  if(side===1&&s<260-(slk||0))return false;
+  if(!placeAllowed(side,s,false,slk)){if(localToast)toast('⚠️ 超出前线：只能建在前线附近或己方半场');return false;}
   if(side)G.aiMoney-=P.cost; else G.money-=P.cost;
   G.pcds[ty][side]=P.cd*(side?1:(RUN?RUN.mods.turCd:1));
   G.units.push({uid:(G.uidSeq=(G.uidSeq||0)+1),side,type:ut,s,off:0,
+    wlv:(ty==='workshop'?1:0),
     hp:st.hp,max:st.hp,cd:rand(0.3,0.8),walk:0,lunge:0,dying:0,moving:false,
     kills:0,vet:0,atkT:9,animT:0});
   if(localToast)toast('🔨 '+P.name+'建造完成'+(ty==='workshop'?'（此位置产量 +'+Math.round(wsYield({side,s}))+'/秒）':''));
   sBoom();
+  return true;
 }
 /* 空降守备队：一支不推进的临时部队，随时代变强，限时后消失 */
-function airdropCore(side,s){
+function airdropCore(side,s,slk){
   const P=PLACEABLES.airdrop;
   const money=side?G.aiMoney:G.money;
-  if(money<P.cost||G.pcds.airdrop[side]>0)return;
-  if(side===0&&s>L-260)return;
-  if(side===1&&s<260)return;
+  if(money<P.cost||G.pcds.airdrop[side]>0)return false;
+  if(side===0&&s>L-260+(slk||0))return false;
+  if(side===1&&s<260-(slk||0))return false;
+  if(!placeAllowed(side,s,true,slk))return false;
   if(side)G.aiMoney-=P.cost; else G.money-=P.cost;
   G.pcds.airdrop[side]=P.cd*(side?1:(RUN?RUN.mods.turCd:1));
   const era=side?G.aiEra:G.era;
@@ -664,6 +787,40 @@ function airdropCore(side,s){
   addFloat(p.x,p.y-50,'🪂 空降!','#ffd76a',20);
   G.booms.push({x:p.x,y:p.y,t:0});
   sSpawn();
+  return true;
+}
+/* ---------------- 反应堆资产化：升级 / 主动回收（均主机权威） ---------------- */
+function wsFind(side,uid){
+  for(const u of G.units)
+    if(u.uid===uid&&u.side===side&&!u.dying&&u.type==='b_workshop')return u;
+  return null;
+}
+function wsUpgradeCore(side,uid){
+  if(!G||G.over)return false;
+  const u=wsFind(side,uid); if(!u||u.recT)return false;
+  const lv=u.wlv||1; if(lv>=WS_MAX)return false;
+  const up=WS_UP[lv+1];
+  const money=side?G.aiMoney:G.money;
+  if(money<up.cost||G.pcds.workshop[side]>0)return false;
+  if(side)G.aiMoney-=up.cost; else G.money-=up.cost;
+  G.pcds.workshop[side]=PLACEABLES.workshop.cd*(side?1:(RUN?RUN.mods.turCd:1));
+  u.wlv=lv+1;
+  const hpAdd=up.hp-WS_UP[lv].hp;
+  u.max+=hpAdd; u.hp=Math.min(u.max,u.hp+hpAdd); /* 只补新增装甲，不免费洗掉已受的伤 */
+  const p=unitPos(u);
+  addFloat(p.x,p.y-58,'⬆️ 反应堆 Lv'+u.wlv,'#ffd76a',16);
+  sBoom();
+  return true;
+}
+function wsRecycleCore(side,uid){
+  if(!G||G.over)return false;
+  const u=wsFind(side,uid); if(!u||u.recT)return false;
+  /* 回收是真实的经济动作：要求且占用 workshop 冷却。否则"回收 130 再前移重建 200"
+     只受 25s 限频，工程师不出一兵就能把建筑阶梯循环拱到 L-260 */
+  if(G.pcds.workshop[side]>0)return false;
+  G.pcds.workshop[side]=PLACEABLES.workshop.cd*(side?1:(RUN?RUN.mods.turCd:1));
+  u.recT=WS_SALVAGE.channel; /* 引导期间停产；受击即打断（见 damage 入口），时机是真博弈 */
+  return true;
 }
 function placeAt(wx,wy){
   placing=false;
@@ -678,9 +835,14 @@ function placeAt(wx,wy){
     if(G.pvp&&NET&&!NET.isHost){
       if(G.money<P.cost||G.pcds[ty][0]>0)return;
       if(pr.s>L-260){toast('⚠️ 离敌方城堡太近');return;}
-      /* 与主机同样的数量上限预检查，避免指令被静默丢弃却提示成功 */
+      /* 与主机同样的预检查，避免指令被静默丢弃却提示成功；
+         前线是移动边界，客机按快照预检、主机按 FRONT.eps 从宽复验+驳回回执 */
       if(P.maxAlive&&countBldg(0,P.unit)>=P.maxAlive){
         toast('⚠️ '+P.name+'最多同时存在 '+P.maxAlive+' 座');
+        return;
+      }
+      if(!placeAllowed(0,pr.s,!!P.drop)){
+        toast(P.drop?'⚠️ 空降超出前线（哨站旗附近可豁免）':'⚠️ 超出前线：只能建在前线附近或己方半场');
         return;
       }
       NET.sendCmd({a:'p',t:ty,x:Math.round(WORLD_W-wx),y:Math.round(WORLD_H-wy)});
@@ -689,7 +851,9 @@ function placeAt(wx,wy){
     }
     if(P.drop){
       if(pr.s>L-260){toast('⚠️ 离敌方城堡太近');return;}
-      airdropCore(0,pr.s);
+      /* 拖动选位期间还能从兵种栏买兵：钱可能已花掉，别把资源问题报成位置问题 */
+      if(G.money<P.cost||G.pcds.airdrop[0]>0){toast('⚠️ 金币不足或空降冷却中');return;}
+      if(!airdropCore(0,pr.s)){toast('⚠️ 空降超出前线（哨站旗附近可豁免）');return;}
       toast('🪂 守备队空降：'+AIRDROP.comp1.length+' 人就地布防 '+P.life+' 秒，在落点附近搜敌，无敌人则归位');
       return;
     }
@@ -712,14 +876,18 @@ function strikeInBounds(wx,wy){
    lead 秒的预警窗口是有意的——被打的一方看得见红圈，来得及把部队挪开 */
 function strikeCore(side,wx,wy,localToast){
   const money=side?G.aiMoney:G.money;
-  if(money<STRIKE.cost||G.pcds.strike[side]>0)return;
-  if(!strikeInBounds(wx,wy)){if(localToast)toast('⚠️ 超出战场边界');return;}
+  if(money<STRIKE.cost||G.pcds.strike[side]>0)return false;
+  if(!strikeInBounds(wx,wy)){if(localToast)toast('⚠️ 超出战场边界');return false;}
   if(side)G.aiMoney-=STRIKE.cost; else G.money-=STRIKE.cost;
   G.pcds.strike[side]=STRIKE.cd*(side?1:(RUN?RUN.mods.turCd:1));
-  G.strikes.push({side,x:wx,y:wy,r:STRIKE.radius,wave:0,pend:0,shellT:0,waveT:STRIKE.lead,lingerT:0});
+  /* ps/pd=打击圈心在路径上的投影，供守备队判断"圈是否盖到路上、往哪边跑"（仅主机用，不进快照） */
+  const pp=nearestPath(wx,wy);
+  G.strikes.push({side,x:wx,y:wy,r:STRIKE.radius,wave:0,pend:0,shellT:0,waveT:STRIKE.lead,lingerT:0,
+    ps:pp?pp.s:-1e9,pd:pp?pp.d:1e9});
   if(localToast)toast('🎯 火力覆盖已呼叫：'+STRIKE.waves+' 轮，每轮间隔 '+STRIKE.gap+' 秒');
   addFloat(wx,wy-30,'🎯 坐标已锁定','#ff9040',18);
   sFlag();
+  return true;
 }
 function fireStrikeShell(k){
   /* sqrt 让落点在圆内均匀分布，否则会全挤在圆心 */

@@ -55,6 +55,7 @@ cv.addEventListener('pointerdown',e=>{
     const it=pointers.values(), a=it.next().value, b=it.next().value;
     pinch0={d:Math.max(20,Math.hypot(a.x-b.x,a.y-b.y)),z:cam.z,mx:(a.x+b.x)/2,my:(a.y+b.y)/2};
     mmDragging=false;
+    dragMoved=999; /* 双指手势结束时最后一指抬起不能被当成"轻点"（会误开反应堆菜单） */
   }
 });
 cv.addEventListener('pointermove',e=>{
@@ -87,6 +88,10 @@ function endPointer(e){
     pinch0={d:Math.max(20,Math.hypot(a.x-b.x,a.y-b.y)),z:cam.z,mx:(a.x+b.x)/2,my:(a.y+b.y)/2};
   }else if(pointers.size<2)pinch0=null;
   if(pointers.size===0&&placing&&placePos&&!mmDragging)placeAt(placePos.x,placePos.y);
+  /* 轻点（没拖动、非放置、非小地图、非 pointercancel）→ 试着选中己方反应堆。
+     必须走 else：placeAt 会把 placing 置 false，顺序执行会把同一次松手又当成轻点 */
+  else if(pointers.size===0&&!mmDragging&&dragMoved<8&&e.type==='pointerup'&&
+          typeof tryPickWorkshop==='function')tryPickWorkshop(e.clientX,e.clientY);
   if(pointers.size===0)mmDragging=false;
 }
 cv.addEventListener('pointerup',endPointer);

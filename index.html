@@ -47,6 +47,12 @@
   <button class="obtn sm" id="btnSpdNo">❌ 拒绝</button>
 </div>
 
+<div id="wsMenu" class="hidden">
+  <span id="wsInfo"></span>
+  <button class="obtn sm" id="btnWsUp" type="button">⬆️</button>
+  <button class="obtn sm" id="btnWsRec" type="button">♻️</button>
+</div>
+
 <div class="overlay" id="menu">
   <div class="panel">
     <h1>🏰 皇城远征 👹</h1>
@@ -58,14 +64,17 @@
     </div>
     <p style="margin:0">选择指挥官：</p>
     <div class="diffs" id="cmdrPickMenu"></div>
-    <p style="margin:0">选择远征难度：</p>
-    <div class="diffs">
-      <button class="obtn" data-diff="easy">😊 简单</button>
-      <button class="obtn" data-diff="normal">🙂 普通</button>
-      <button class="obtn" data-diff="hard">😈 困难</button>
-    </div>
     <div class="diffs">
       <button class="obtn" id="btnPvp">⚔️ 好友对战（P2P）</button>
+    </div>
+    <div id="soloSec">
+      <p id="soloNote" style="margin:8px 0 0">🚧 单人远征封存改造中——联机模式打磨成熟后回归</p>
+      <p style="margin:0">选择远征难度：</p>
+      <div class="diffs">
+        <button class="obtn" data-diff="easy">😊 简单</button>
+        <button class="obtn" data-diff="normal">🙂 普通</button>
+        <button class="obtn" data-diff="hard">😈 困难</button>
+      </div>
     </div>
   </div>
 </div>
