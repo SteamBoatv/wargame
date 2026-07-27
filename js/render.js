@@ -133,6 +133,14 @@ function drawBuilding(u,p,st){
     }
   }
 }
+/* 哥布林配色：单人关卡由 stage 统一指定（精英/BOSS 全紫）；
+   PvP 军阀阵营下 stage 不指定，按兵种时代分色——时代 II = 紫色精英，
+   与骑士团"黑铁换装"同一口径。敌我区分靠脚下椭圆描边，不占用配色维度。 */
+function gobColorOf(st){
+  if(st.era===2)return 'purple';   /* 时代 II 恒为紫色精英：这是军阀的换装身份，不该被关卡配色盖掉 */
+  const g=G&&G.stage&&G.stage.gobColor;
+  return g||'red';
+}
 /* 机械单位：帧尺寸随动画不同（例如 Droid01 射击帧 48px、待机 32px），
    按 每源像素固定屏幕尺寸(mpx) 缩放并底部对齐，保证机体大小一致 */
 /* dir=推进方向（用于冲刺位移），fdir=朝向（守备队后撤归位时与推进方向相反） */
@@ -201,7 +209,7 @@ function drawUnit(u,p){
   }else if(u.moving){
     ctx.translate(0,-Math.abs(Math.sin(u.walk))*3.5);
   }
-  const gobSheet=st.gob?(ASSETS.gob[(G&&G.stage)?G.stage.gobColor:'red']||{})[st.gob]:null;
+  const gobSheet=st.gob?(ASSETS.gob[gobColorOf(st)]||{})[st.gob]:null;
   const set=st.ts?ASSETS.ts[unitColor(u.side,st)]:null;
   const runImg=set?set[TS_UNITS[st.ts].run]:null;
   if(st.mech&&drawMechUnit(u,p,st,fdir)){
@@ -551,12 +559,13 @@ function draw(){
       /* 建筑虚影：吸附到道路中心，绿=可建 红=不可建（含前线规则） */
       const P=PLACEABLES[placingType];
       const pr=nearestPath(placePos.x,placePos.y);
-      const ok=pr&&pr.d<=76*pr.wf&&pr.sep<=5&&pr.s<=L-260&&placeAllowed(0,pr.s,!!P.drop);
+      const ok=pr&&pr.d<=76*pr.wf&&pr.sep<=5&&pr.s<=L-260&&placeAllowed(0,pr.s,placeKind(P));
       const gp=pr?pathPos(pr.s):placePos;
       /* 前线上限界标：横跨道路的虚线，玩家一眼看到"最远能放到哪"。
          空降要取与 dropCap 的较小值——元帅唯一的放置物不能看一条错的线 */
       {
-        const rawLim=P.drop?Math.min(placeLimitS(0),L-FRONT.dropCap):placeLimitS(0);
+        const K=placeKind(P);
+        const rawLim=K==='drop'?Math.min(placeLimitS(0,0,K),L-FRONT.dropCap):placeLimitS(0,0,K);
         const lim=Math.max(12,Math.min(L-12,rawLim));
         const lp=pathPos(lim), lp2=pathPos(Math.max(0,lim-10));
         const dx=lp.x-lp2.x, dy=lp.y-lp2.y, dl=Math.hypot(dx,dy)||1;

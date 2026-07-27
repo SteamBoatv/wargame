@@ -54,7 +54,11 @@ async function netOpen(code,role){
   const ice=await netFetchIce();
   NET_ICE_OK=ice.length>0;
   const room=lib.joinRoom({
-    appId:'kip-wargame-pvp-v1',
+    /* ⚠️ 每次改动线材协议（UNITS 顺序 / COMMANDERS 键 / 快照字段）都必须升这个版本号。
+       旧客户端收到未知指挥官键会直接 TypeError 死锁（不是优雅退化），而 GitHub Pages
+       的 JS 默认缓存 10 分钟——不换房间号就会有新旧端在同一个房间里互相拖死。
+       v2：新增 warlord 指挥官与 torch2/tnt2/barrel2 三个兵种类型。 */
+    appId:'kip-wargame-pvp-v2',
     turnConfig:[
       {urls:'stun:global.stun.twilio.com:3478'},
       {urls:'stun:stun.nextcloud.com:3478'},
@@ -269,7 +273,7 @@ function netLockCmdr(){
 function netMaybeReveal(){
   if(NET&&NET.myLocked&&NET.peerLocked&&!NET.revealed){
     NET.revealed=true;
-    const foe=COMMANDERS[NET.peerCmdr||'marshal'];
+    const foe=cmdrDef(NET.peerCmdr);
     toast('🎭 指挥官揭晓！对方是 '+foe.icon+' '+foe.name);
     netLobbyStatus();
     sEvolve();
@@ -297,7 +301,7 @@ function netLobbyStatus(){
   let foeTxt='';
   if(NET.peer){
     if(bothLocked){
-      const foe=COMMANDERS[NET.peerCmdr||'marshal'];
+      const foe=cmdrDef(NET.peerCmdr);
       foeTxt='🎭 对方指挥官：'+foe.icon+' '+foe.name;
     }else if(NET.peerLocked)foeTxt='🎭 对方已确认（选择保密，等你确认后揭晓）';
     else foeTxt='⌛ 对方选择指挥官中…';
@@ -359,7 +363,7 @@ function netStartSpectator(mt){
     node:{t:'pvp'},per:PVP_PER,
     cmdr0:mt.c0||'marshal',cmdr1:mt.c1||'marshal',
     events:[],mapDef:NET.specMirror?mirrorDef(mt.def):mt.def,
-    aiIncomeMul:1,hpMul:1,dmgMul:1,gobColor:'red',
+    aiIncomeMul:1,hpMul:1,dmgMul:1,gobColor:null,
   };
   NET.specDef=mt.def;
   newGame(stage);
@@ -368,7 +372,7 @@ function netStartSpectator(mt){
   mode='play';
   ['pvpov','menu','mapov','gameover','runover'].forEach(id=>$(id).classList.add('hidden'));
   document.body.classList.add('spectating');
-  toast('👁️ 观战开始：'+COMMANDERS[stage.cmdr0].icon+'蓝方 vs '+COMMANDERS[stage.cmdr1].icon+'红方');
+  toast('👁️ 观战开始：'+cmdrDef(stage.cmdr0).icon+'蓝方 vs '+cmdrDef(stage.cmdr1).icon+'红方');
   $('wTag').textContent='';
   keepAwake();
   startMusic();
@@ -414,7 +418,7 @@ function netStartCommon(def,events,isHost,myCmdr,foeCmdr){
     cmdr0:myCmdr||'marshal',cmdr1:foeCmdr||'marshal',
     events:isHost?events:[],
     mapDef:isHost?def:mirrorDef(def),
-    aiIncomeMul:1,hpMul:1,dmgMul:1,gobColor:'red',
+    aiIncomeMul:1,hpMul:1,dmgMul:1,gobColor:null, /* null=按时代分色，见 render.js gobColorOf */
   };
   newGame(stage);
   G.pvp=true;
@@ -471,8 +475,10 @@ function netApplyCmd(c){
       if(c.t==='strike'){ok=strikeCore(1,c.x,c.y,false);break;}
       const pr=nearestPath(c.x,c.y);
       if(!pr||pr.d>76*pr.wf||pr.sep>5)break;
-      ok=PLACEABLES[c.t].drop?airdropCore(1,pr.s,FRONT.eps)
-                             :buildingPlaceCore(1,c.t,pr.s,false,FRONT.eps);
+      const PP=PLACEABLES[c.t];
+      ok=PP.horde?hordeCore(1,pr.s,FRONT.eps)
+        :PP.drop ?airdropCore(1,pr.s,FRONT.eps)
+                 :buildingPlaceCore(1,c.t,pr.s,false,FRONT.eps);
     }while(0);
     if(!ok)netRej(c.t);
   }else if(c.a==='wu'||c.a==='wr'){

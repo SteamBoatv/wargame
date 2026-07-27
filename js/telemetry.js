@@ -4,7 +4,7 @@
    上传目标是 Cloudflare 代理的域名——源站真实地址不出现在本仓库任何位置。
    URL 里的 k= 只是防手滑门槛，不是机密；服务端另有大小与结构校验。 */
 const TELE_URL='https://wg.littleshark.xin/t/match?k=wgtl_c243981ea1842800';
-const TELE_VER='2026.07.27-frontline-assets';   /* 每次平衡改版随手升级，脏数据全靠它隔离 */
+const TELE_VER='2026.07.28-warlord';   /* 每次平衡改版随手升级，脏数据全靠它隔离 */
 const TELE_QKEY='wgTeleQueue';
 let TELE=null;
 
@@ -25,8 +25,8 @@ function teleTick(){
   }
   TELE.samp.push([Math.round(t),
     G.money|0,G.aiMoney|0,
-    Math.round(G.income+FLAG_INCOME*ownedFlags(0)+wy[0]),
-    Math.round(G.aiIncome+FLAG_INCOME*ownedFlags(1)+wy[1]),
+    Math.round(G.income+FLAG_INCOME*ownedFlags(0)+wy[0]+plunderOf(0)),
+    Math.round(G.aiIncome+FLAG_INCOME*ownedFlags(1)+wy[1]+plunderOf(1)),
     G.xp|0,G.aiXp|0,G.era,G.aiEra,
     wn[0],wn[1],wl[0],wl[1],
     Math.round(G.baseHp[0]),Math.round(G.baseHp[1]),

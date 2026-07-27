@@ -17,7 +17,9 @@ const UNITS={
   shield2:{emoji:'🛡️',name:'黑铁重盾',cls:'tank',  ts:'guard',  era:2,w:14,cost:210,hp:520,dmg:15,cd:1.1,range:30, speed:43,build:2.8},
   monk2:{emoji:'✝️',name:'大修士', cls:'heal',  ts:'monk',   era:2,w:9, cost:190,hp:130,dmg:0,heal:26,cd:1.5,range:140,speed:55,build:2.2},
   /* ---- 哥布林阵营（Roguelike 敌方关卡） ---- */
-  torch:{emoji:'🔥',name:'火把狂徒',cls:'inf',   gob:'torch', era:1,w:30,cost:45, hp:95, dmg:12,cd:0.7,range:28, speed:95,build:1.0},
+  /* PvP 下调：这三行原本是按"被玩家打的 AI 敌人"调的，火把狂徒近乎严格优于剑士
+     （更便宜、快 36%、每金币 DPS 高 17%）。降血降伤保留"快而脆"，单人已封存不受影响 */
+  torch:{emoji:'🔥',name:'火把狂徒',cls:'inf',   gob:'torch', era:1,w:30,cost:45, hp:88, dmg:11,cd:0.7,range:28, speed:95,build:1.0},
   tnt:{emoji:'🧨',name:'TNT投手', cls:'ranged',gob:'tnt',   era:1,w:16,cost:110,hp:85, dmg:22,cd:1.8,range:180,speed:55,build:1.9,proj:'dynamite',splash:60},
   barrel:{emoji:'💣',name:'滚桶兵', cls:'bomb',  gob:'barrel',era:1,w:14,cost:90, hp:140,dmg:46,cd:1,  range:26, speed:85,build:1.6,splash:55},
   /* ---- 攻城工程师：机械化军团（Foozle Sci-Fi Lab, CC0） ----
@@ -32,6 +34,13 @@ const UNITS={
   b_barricade:{emoji:'🚧',name:'路障', cls:'bldg',bk:'barricade',era:1,w:0,cost:120,hp:900,dmg:0, cd:9,  range:0,  speed:0,build:0},
   b_tower:{emoji:'🗼',name:'激光塔',cls:'bldg',bk:'tower',   era:1,w:0,cost:220,hp:450,dmg:14,cd:0.9,range:230,speed:0,build:0,proj:'laser_t',mz:[14,-78]},
   b_workshop:{emoji:'🏭',name:'反应堆',cls:'bldg',bk:'workshop',era:1,w:0,cost:200,hp:300,dmg:0, cd:9,  range:0,  speed:0,build:0},
+  /* ---- 掠夺军阀 时代 II：紫色精英哥布林（素材 gob_purple_* 已就位，与红色逐格同构）----
+     ⚠️ 新兵种必须追加在 UNITS 末尾：TYPE_KEYS=Object.keys(UNITS) 的顺序就是快照线材协议，
+     插在中间会让跨版本客户端的单位类型整体错位（静默错误，极难排查）。
+     命名必须是 xxx2 —— famOf 用 /2$/ 归族，改名会让时代 II 脱离家族特训。 */
+  torch2:{emoji:'🔥',name:'狂焰暴徒',cls:'inf',   gob:'torch', era:2,w:30,cost:75, hp:145,dmg:19,cd:0.7,range:28, speed:95,build:1.2},
+  tnt2:{emoji:'🧨',name:'炸药狂人',cls:'ranged',gob:'tnt',   era:2,w:16,cost:170,hp:130,dmg:36,cd:1.7,range:190,speed:55,build:2.1,proj:'dynamite',splash:65},
+  barrel2:{emoji:'💣',name:'爆桶暴徒',cls:'bomb',  gob:'barrel',era:2,w:14,cost:150,hp:262,dmg:78,cd:1,  range:26, speed:85,build:1.8,splash:60},
 };
 const ERA_ROSTER={
   1:['sword','spear','archer','shield','monk'],
@@ -41,7 +50,7 @@ const COUNTER={ /* 克制环：剑克枪/建筑 → 枪克盾/爆破/攻城 → 
   inf:{spear:1.5,bldg:1.6},
   spear:{tank:1.6,bomb:1.6,siege:1.6},
   ranged:{inf:1.5,heal:1.5},
-  siege:{bldg:2.5,tank:1.3},
+  siege:{bldg:2.5,tank:1.3,bomb:1.5},   /* 攻城车碾滚桶：否则 siege 对军阀阵容全线无克制 */
   bomb:{bldg:1.8},
 };
 const CLS_NAME={inf:'步兵',spear:'枪兵',ranged:'远程',tank:'重甲',heal:'修士',bomb:'爆破',siege:'攻城',bldg:'建筑'};
@@ -67,7 +76,29 @@ const COMMANDERS={
     roster:{1:['militia','crossbow','ram'],2:['militia2','crossbow2','ram2']},
     place:['barricade','tower','workshop','strike'],
   },
+  /* 第三条经济路线：不投资、不积累，收入靠"把部队压进敌方半场"现抢。
+     曲线与另两位相反——前期碾压、后期乏力，是必须速胜的阵营。
+     短板是结构性的：无坦克、无治疗、无建筑，被推回自家半场掠夺就归零。 */
+  warlord:{
+    icon:'⚔️',art:'assets/art/cmdr_warlord.png',name:'掠夺军阀',
+    desc:'以战养战：部队踏入敌方半场即掠夺产金 · 高额人头赏金 · 匪群突袭 · 无坦克无治疗',
+    income:3,killMult:0.5,mining:false,plunder:true,
+    roster:{1:['torch','tnt','barrel'],2:['torch2','tnt2','barrel2']},
+    place:['horde'],
+  },
 };
+/* 掠夺：越过半场线的己方机动单位按"深入程度"产金，ramp 处满额，总量计 cap 个封顶。
+   ⚠️ 必须是软坡度而不是硬阈值——硬阈值在两种对局里同时错：
+   ① 军阀速度 95 vs 全场对手最快 70，自然接战线恒在 0.57L 之后 → 一开打就无条件满额；
+   ② 军阀内战速度对称，接战点恰好落在 L/2、双方前排各停在 ∓14px → 双方恒为 0、经济锁死。
+   坡度让"多推一点多赚一点"变成连续的，也消掉了跨一像素从 0 跳到满额的台阶。 */
+const PLUNDER={rate:3.0,cap:5,ramp:0.11};
+/* 未知指挥官键必须退化而不是抛异常：跨版本时旧端会收到它不认识的 key，
+   裸下标会在大厅/开局中途 TypeError，把房间拖成无提示死锁（appId 已升级作为第一道防线） */
+function cmdrDef(k){return COMMANDERS[k]||COMMANDERS.marshal;}
+/* 放置物三分法：建筑 / 空投驻防 / 突袭。三者的前线规则不同，
+   核心与客机预检、放置虚影、前线界标必须全部用同一个谓词，否则会出现"房主能放客机不能" */
+const placeKind=P=>P.horde?'horde':(P.drop?'drop':'bldg');
 function cmdrOf(side){
   const k=side?(G&&G.cmdr1)||'marshal':(G&&G.cmdr0)||'marshal';
   return COMMANDERS[k]||COMMANDERS.marshal;
@@ -81,6 +112,14 @@ const STRIKE={cost:260,cd:50,radius:118,waves:3,gap:5,shells:7,shellGap:0.16,
 /* 空降守备队（王国元帅技能）：3 近战 + 2 远程，落地就摆成前后两排的小阵型。
    它们只在空降点 leash 范围内活动搜敌，锁不到更远的目标，范围内没敌人就自动归位；
    永远不推进战线——这是它和常规出兵的根本区别。 */
+/* 匪群突袭（军阀技能）：在选定位置刷出一波常规部队，落地即向前推进。
+   与元帅空降的区别是刻意的——空降是"原地驻防的守备队"，突袭是"直接投放的攻势"。 */
+const HORDE={
+  cost:250,cd:45,
+  comp1:['torch','torch','torch','torch','barrel'],   /* 270 金货 → +8% 溢价 */
+  comp2:['torch2','torch2','torch2','barrel2'],      /* 375 金货 → +50%，与空降的 +43%/+130% 同档 */
+  lane:[0,-22,22,-44,44],
+};
 const AIRDROP={
   comp1:['sword','sword','sword','archer','archer'],
   comp2:['sword2','sword2','sword2','archer2','archer2'],
@@ -102,6 +141,7 @@ const FRONT={margin:100,window:8,floor:0.45,dropCap:420,eps:40};
 const PLACEABLES={
   strike:{emoji:'🎯',name:'火力覆盖',cost:STRIKE.cost,cd:STRIKE.cd,road:false,strike:true},
   airdrop:{emoji:'🪂',name:'空降',cost:250,cd:50,road:true,drop:true,life:25},
+  horde:{emoji:'🏴',name:'匪群突袭',cost:HORDE.cost,cd:HORDE.cd,road:true,horde:true},
   barricade:{emoji:'🚧',name:'路障',cost:120,cd:20,road:true,maxAlive:2,unit:'b_barricade'},
   tower:{emoji:'🗼',name:'激光塔',cost:220,cd:35,road:true,maxAlive:2,unit:'b_tower'},
   workshop:{emoji:'🏭',name:'反应堆',cost:200,cd:25,road:true,maxAlive:3,unit:'b_workshop'},

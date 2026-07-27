@@ -21,7 +21,8 @@ function refreshHUD(){
   /* 含反应堆产量：工程师的经济几乎全靠工坊，不算进去 HUD 会显示成"零增长" */
   let wsy=0;
   for(const u of G.units)if(!u.dying&&u.side===0&&u.type==='b_workshop')wsy+=wsYield(u);
-  $('incomeTxt').textContent='+'+Math.round(G.income+FLAG_INCOME*ownedFlags(0)+wsy)+'/秒';
+  /* 含掠夺：军阀的收入几乎全靠它，不计进去 HUD 会显示成"只有 3/秒" */
+  $('incomeTxt').textContent='+'+Math.round(G.income+FLAG_INCOME*ownedFlags(0)+wsy+plunderOf(0))+'/秒';
   $('hpL').style.width=(G.baseHp[0]/BASE_HP*100)+'%';
   $('hpR').style.width=(G.baseHp[1]/BASE_HP*100)+'%';
   const wt0=$('wTag');
@@ -121,8 +122,16 @@ function buildUnitButtons(){
     b.title=t;
     const mIdle=st.mech?(ASSETS.mech&&ASSETS.mech.blue[st.mech+'_idle']):null;
     const set=st.ts?ASSETS.ts[G&&G.era===2?'black':'blue']:null;
+    /* 哥布林是 192px 多行图集，不能套用单行逻辑：单独取 idle 行的第 0 帧 */
+    const gSheet=st.gob?((ASSETS.gob&&ASSETS.gob[st.era===2?'purple':'red'])||{})[st.gob]:null;
     const idle=mIdle||(set?set[TS_UNITS[st.ts].idle]:null);
-    if(idle){
+    if(gSheet){
+      b.innerHTML='<canvas class="be bi" width="40" height="40"></canvas><span class="bn">'+st.name+'</span><span class="bc">💰'+st.cost+'</span>';
+      const cc=b.querySelector('canvas').getContext('2d');
+      cc.imageSmoothingEnabled=false;
+      const row=(GOB_META[st.gob]||{idle:[0,1]}).idle[0];
+      cc.drawImage(gSheet,192*0.24,row*192+192*0.18,192*0.52,192*0.60,0,0,40,40);
+    }else if(idle){
       b.innerHTML='<canvas class="be bi" width="40" height="40"></canvas><span class="bn">'+st.name+'</span><span class="bc">💰'+st.cost+'</span>';
       const cc=b.querySelector('canvas').getContext('2d');
       cc.imageSmoothingEnabled=false;
@@ -628,7 +637,7 @@ function wsSelUnit(){
 function showWsMenu(){
   $('wsMenu').classList.remove('hidden');
   refreshWsMenu();
-  if(!wsMenuTimer)wsMenuTimer=setInterval(refreshWsMenu,400);
+  if(!wsMenuTimer)wsMenuTimer=setInterval(refreshWsMenu,250); /* 250ms：秒数跳动才跟得上 */
 }
 function hideWsMenu(){
   wsSelUid=null;wsRecArm=0;
@@ -640,17 +649,23 @@ function refreshWsMenu(){
   const u=wsSelUnit();
   if(!u||!G||G.over||mode!=='play'||paused||G.spectator){hideWsMenu();return;}
   const lv=u.wlv||1;
-  $('wsInfo').textContent='🏭 反应堆 Lv'+lv+(u.recT?'（回收中）':'');
+  /* 升级/回收/新建三者共用 workshop 冷却。按钮只置灰不计时的话，
+     玩家看不出"还要等多久"，会以为是坏了——倒计时必须直接画在按钮上，
+     标题也要点明是"施工冷却"，否则没人能把它和建造按钮的冷却联系起来。 */
+  const cd=G.pcds.workshop[0];
+  const cdTxt=cd>0?' ⏳'+Math.ceil(cd)+'s':'';
+  $('wsInfo').textContent='🏭 反应堆 Lv'+lv+
+    (u.recT?'（回收中）':(cd>0?'　施工冷却'+cdTxt:''));
   const up=$('btnWsUp'),rec=$('btnWsRec');
   if(lv>=WS_MAX){up.textContent='⬆️ 已满级';up.classList.add('dis');}
   else{
     const cost=WS_UP[lv+1].cost;
-    up.textContent='⬆️ 升级 '+cost+'💰';
-    up.classList.toggle('dis',G.money<cost||G.pcds.workshop[0]>0||!!u.recT);
+    up.textContent='⬆️ 升级 '+cost+'💰'+cdTxt;
+    up.classList.toggle('dis',G.money<cost||cd>0||!!u.recT);
   }
   const back=Math.round(wsInvOf(lv)*WS_SALVAGE.recycle);
-  if(performance.now()>wsRecArm)rec.textContent='♻️ 回收 +'+back+'💰';
-  rec.classList.toggle('dis',!!u.recT||G.pcds.workshop[0]>0);
+  if(performance.now()>wsRecArm)rec.textContent='♻️ 回收 +'+back+'💰'+cdTxt;
+  rec.classList.toggle('dis',!!u.recT||cd>0);
 }
 const wsGate=()=>{ /* 与 buy/tryEvolve 同一套操作门控 */
   if(!G||mode!=='play'||paused||G.over||G.spectator){hideWsMenu();return null;}

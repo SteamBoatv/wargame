@@ -15,15 +15,15 @@ function newGame(stage){
      events:(stage.events||[]).map(e=>({...e})),
      piles:[],bountyT:0,
      money:150+(RUN?RUN.mods.gold+RUN.goldCarry:0),
-     income:COMMANDERS[c0].income+(RUN?RUN.mods.income:0),
+     income:cmdrDef(c0).income+(RUN?RUN.mods.income:0),
      incomeLvl:0,era:1,
      xp:RUN?Math.round(EVOLVE_XP*RUN.mods.xp0):0,
-     aiMoney:150,aiIncome:isPvp?COMMANDERS[c1].income:8*stage.aiIncomeMul,aiIncomeLvl:0,aiDecide:2,aiPlan:null,
+     aiMoney:150,aiIncome:isPvp?cmdrDef(c1).income:8*stage.aiIncomeMul,aiIncomeLvl:0,aiDecide:2,aiPlan:null,
      aiEra:per.aiEra||1,aiXp:0,
      baseHp:[BASE_HP,BASE_HP],
      units:[],projs:[],floats:[],queue:[],aiQueue:[],shake:0,spawnCnt:[0,0],
      flags:CUR_DEF.flags.map(fs=>({s:fs*L,owner:-1,prog:0})),
-     strikes:[],pcds:{strike:[0,0],airdrop:[0,0],barricade:[0,0],tower:[0,0],workshop:[0,0]},booms:[],
+     strikes:[],pcds:{strike:[0,0],airdrop:[0,0],horde:[0,0],barricade:[0,0],tower:[0,0],workshop:[0,0]},booms:[],
      streakN:0,streakT:-9,lastWarn:-9,banner:null,flash:0};
   if(RUN)RUN.goldCarry=0;
   placing=false; placePos=null;
@@ -150,6 +150,20 @@ function applyDamage(e,r,bySide,attacker){
     else addFloat(p.x,p.y-58,'克制'+Math.round(r.dmg)+'!','#ff6a6a',15);
   }
   damage(e,r.dmg,bySide,attacker);
+}
+/* 掠夺（军阀经济）：越过半场线的己方机动单位每秒产金，计数封顶防雪球。
+   side1 的"敌方半场"是 s<L/2 —— 写死成 s>L/2 会在 180° 镜像后反向。
+   建筑与守备队不计：前者军阀没有，后者是"占着不推进"的兵，不该算掠夺。 */
+function plunderOf(side){
+  if(!cmdrOf(side).plunder)return 0;
+  const half=L*0.5, ramp=L*PLUNDER.ramp;
+  let sum=0;
+  for(const u of G.units){
+    if(u.side!==side||u.dying||u.guard||UNITS[u.type].cls==='bldg')continue;
+    const d=side?half-u.s:u.s-half;   /* side1 的"敌方半场"在 s 小的一侧，写死会在镜像后反向 */
+    if(d>0)sum+=Math.min(1,d/ramp);
+  }
+  return Math.min(sum,PLUNDER.cap)*PLUNDER.rate;
 }
 /* 哨站占领 */
 function ownedFlags(side){let n=0;for(const f of G.flags)if(f.owner===side)n++;return n;}
@@ -531,8 +545,9 @@ function update(dt){
       }
       if(u.side)wy1+=wsYield(u);else wy0+=wsYield(u);
     }
-  G.money+=(G.income+FLAG_INCOME*ownedFlags(0)+wy0)*dt;
-  G.aiMoney+=(G.aiIncome+FLAG_INCOME*ownedFlags(1)+wy1)*dt;
+  const pl0=plunderOf(0), pl1=plunderOf(1);
+  G.money+=(G.income+FLAG_INCOME*ownedFlags(0)+wy0+pl0)*dt;
+  G.aiMoney+=(G.aiIncome+FLAG_INCOME*ownedFlags(1)+wy1+pl1)*dt;
   updQueue(G.queue,dt,0);
   updQueue(G.aiQueue,dt,1);
   if(!G.pvp)aiThink(dt);
@@ -722,22 +737,30 @@ function frontSmooth(side){
 /* slk 也要作用于全部静态边界：主客各自用自己的路径表把坐标量化到 24px 栅格，
    同一物理点两端算出的 s 实测最大差 ~24px——"静态公式双端一致"并不成立，
    不从宽的话客机在保底/硬限边缘的合法放置会被主机随机驳回 */
-function placeLimitS(side,slk){
+function placeLimitS(side,slk,kind){
   const f=frontSmooth(side), m=FRONT.margin+(slk||0), e=slk||0;
-  return side?Math.max(260-e,Math.min(f-m,L-FRONT.floor*L-e))
-             :Math.min(L-260+e,Math.max(f+m,FRONT.floor*L+e));
+  /* 近半场保底是给"刚被团灭、需要在家门口放防御建筑"的人留的。
+     匪群突袭是攻势投放且单位永不回头——让它吃这个保底，就等于被打爆的一方
+     每 45 秒能把 4 个推进单位空投到掠夺线前 134px，"被推回半场掠夺归零"直接失效。 */
+  const fl=kind==='horde'?0:FRONT.floor*L;
+  return side?Math.max(260-e,Math.min(f-m,L-fl-e))
+             :Math.min(L-260+e,Math.max(f+m,fl+e));
 }
 function nearFlagS(s){
   for(const f of G.flags)if(Math.abs(f.s-s)<=FLAG_RANGE)return true;
   return false;
 }
-function placeAllowed(side,s,drop,slk){
-  const e=slk||0;
+/* kind: 'bldg' | 'drop' | 'horde'（见 data.js 的 placeKind）。
+   哨站旗豁免只给 drop —— 那是为"守备队抢旗翻盘"设计的，而守备队 guard=true：
+   打不了城堡、拉不动前线、25 秒消散。突袭兵这三条自限一条都没有，
+   给它同一个豁免就等于开了一条"投 4 个推进兵到敌方后场"的后门。 */
+function placeAllowed(side,s,kind,slk){
+  const e=slk||0, drop=kind==='drop';
   /* dropCap 是无条件硬限，哨站旗也不豁免——世界生成的兜底会把旗放到 0.8L，
      豁免它的话守备队索敌圈（310px）就能盖住对方出兵点 */
   if(drop&&(side?s<FRONT.dropCap-e:s>L-FRONT.dropCap+e))return false;
-  const lim=placeLimitS(side,slk);
-  if(side?s<lim:s>lim)return !!drop&&nearFlagS(s); /* 空降在哨站旗附近豁免：抢旗翻盘保留 */
+  const lim=placeLimitS(side,slk,kind);
+  if(side?s<lim:s>lim)return drop&&nearFlagS(s);
   return true;
 }
 function buildingPlaceCore(side,ty,s,localToast,slk){
@@ -747,7 +770,7 @@ function buildingPlaceCore(side,ty,s,localToast,slk){
   if(countBldg(side,ut)>=P.maxAlive){if(localToast)toast('⚠️ '+P.name+'最多同时存在 '+P.maxAlive+' 座');return false;}
   if(side===0&&s>L-260+(slk||0)){if(localToast)toast('⚠️ 离敌方城堡太近');return false;}
   if(side===1&&s<260-(slk||0))return false;
-  if(!placeAllowed(side,s,false,slk)){if(localToast)toast('⚠️ 超出前线：只能建在前线附近或己方半场');return false;}
+  if(!placeAllowed(side,s,'bldg',slk)){if(localToast)toast('⚠️ 超出前线：只能建在前线附近或己方半场');return false;}
   if(side)G.aiMoney-=P.cost; else G.money-=P.cost;
   G.pcds[ty][side]=P.cd*(side?1:(RUN?RUN.mods.turCd:1));
   G.units.push({uid:(G.uidSeq=(G.uidSeq||0)+1),side,type:ut,s,off:0,
@@ -766,7 +789,7 @@ function airdropCore(side,s,slk){
   if(money<P.cost||G.pcds.airdrop[side]>0)return false;
   if(side===0&&s>L-260+(slk||0))return false;
   if(side===1&&s<260-(slk||0))return false;
-  if(!placeAllowed(side,s,true,slk))return false;
+  if(!placeAllowed(side,s,'drop',slk))return false;
   if(side)G.aiMoney-=P.cost; else G.money-=P.cost;
   G.pcds.airdrop[side]=P.cd*(side?1:(RUN?RUN.mods.turCd:1));
   const era=side?G.aiEra:G.era;
@@ -792,6 +815,35 @@ function airdropCore(side,s,slk){
   G.booms.push({x:p.x,y:p.y,t:0});
   sSpawn();
   teleCmd(side,'airdrop',Math.round(s));
+  return true;
+}
+/* 匪群突袭：在选定位置投放一波常规部队（会推进、不到期消散、不设拴绳），
+   与空降守备队的"原地驻防"形成对照。同样受前线放置规则约束。 */
+function hordeCore(side,s,slk){
+  const P=PLACEABLES.horde;
+  const money=side?G.aiMoney:G.money;
+  if(money<P.cost||G.pcds.horde[side]>0)return false;
+  if(side===0&&s>L-260+(slk||0))return false;
+  if(side===1&&s<260-(slk||0))return false;
+  if(!placeAllowed(side,s,'horde',slk))return false;
+  if(side)G.aiMoney-=P.cost; else G.money-=P.cost;
+  G.pcds.horde[side]=P.cd*(side?1:(RUN?RUN.mods.turCd:1));
+  const era=side?G.aiEra:G.era;
+  const comp=era===2?HORDE.comp2:HORDE.comp1;
+  comp.forEach((k,i)=>{
+    const st=UNITS[k];
+    const hpMul=(side?(G.stage?G.stage.hpMul:1):(RUN?RUN.mods.hp:1)*famMod(k,'hp'));
+    const hp=Math.round(st.hp*hpMul);
+    G.units.push({uid:(G.uidSeq=(G.uidSeq||0)+1),side,type:k,
+      s:clamp(s+rand(-14,14),20,L-20),off:HORDE.lane[i%HORDE.lane.length]+rand(-3,3),
+      hp,max:hp,cd:rand(0.1,0.4),walk:rand(0,6),lunge:0,dying:0,moving:false,
+      kills:0,vet:0,atkT:9,animT:rand(0,9)});
+  });
+  const p=pathPos(s);
+  addFloat(p.x,p.y-50,'🏴 突袭!','#ff9040',20);
+  G.booms.push({x:p.x,y:p.y,t:0});
+  sSpawn();
+  teleCmd(side,'horde',Math.round(s));
   return true;
 }
 /* ---------------- 反应堆资产化：升级 / 主动回收（均主机权威） ---------------- */
@@ -838,7 +890,7 @@ function placeAt(wx,wy){
   if(P.road){
     const pr=nearestPath(wx,wy);
     if(!pr||pr.d>76*pr.wf){toast('⚠️ '+P.name+'只能选在道路上');return;}
-    if(pr.sep>5){toast('⚠️ 岔路口无法'+(P.drop?'空降':'施工'));return;}
+    if(pr.sep>5){toast('⚠️ 岔路口无法'+(P.horde?'投放':P.drop?'空降':'施工'));return;}
     if(G.pvp&&NET&&!NET.isHost){
       if(G.money<P.cost||G.pcds[ty][0]>0)return;
       if(pr.s>L-260){toast('⚠️ 离敌方城堡太近');return;}
@@ -848,12 +900,21 @@ function placeAt(wx,wy){
         toast('⚠️ '+P.name+'最多同时存在 '+P.maxAlive+' 座');
         return;
       }
-      if(!placeAllowed(0,pr.s,!!P.drop)){
-        toast(P.drop?'⚠️ 空降超出前线（哨站旗附近可豁免）':'⚠️ 超出前线：只能建在前线附近或己方半场');
+      if(!placeAllowed(0,pr.s,placeKind(P))){
+        toast(P.horde?'⚠️ 突袭超出前线：只能投在前线附近'
+             :P.drop?'⚠️ 空降超出前线（哨站旗附近可豁免）'
+                    :'⚠️ 超出前线：只能建在前线附近或己方半场');
         return;
       }
       NET.sendCmd({a:'p',t:ty,x:Math.round(WORLD_W-wx),y:Math.round(WORLD_H-wy)});
-      toast(P.drop?'🪂 空降指令已发送':'🔨 建造指令已发送');
+      toast(P.horde?'🏴 突袭指令已发送':P.drop?'🪂 空降指令已发送':'🔨 建造指令已发送');
+      return;
+    }
+    if(P.horde){
+      if(pr.s>L-260){toast('⚠️ 离敌方城堡太近');return;}
+      if(G.money<P.cost||G.pcds.horde[0]>0){toast('⚠️ 金币不足或突袭冷却中');return;}
+      if(!hordeCore(0,pr.s)){toast('⚠️ 突袭超出前线：只能投在前线附近');return;}
+      toast('🏴 匪群突袭：'+HORDE.comp1.length+' 名匪徒就地投放，立刻向前推进');
       return;
     }
     if(P.drop){

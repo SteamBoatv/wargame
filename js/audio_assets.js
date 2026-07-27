@@ -81,7 +81,11 @@ let MUSIC=null, meleeAlt=false, lastCoinS=0;
   }
   for(const c of ['red','purple'])for(const u of ['torch','tnt','barrel']){
     const im=new Image();
-    im.onload=()=>{ASSETS.gob[c][u]=im;};
+    /* 军阀的出兵栏图标要用这批图，加载完必须重建按钮，否则一直停在 emoji 兜底 */
+    im.onload=()=>{
+      ASSETS.gob[c][u]=im;
+      if(typeof G!=='undefined'&&G&&typeof buildUnitButtons==='function')buildUnitButtons();
+    };
     im.src='assets/ts/gob_'+c+'_'+u+'.png';
   }
   const misc={castle_blue:1,castle_red:1,castle_destroyed:1,arrow:1,explosion:1,dynamite:1};
