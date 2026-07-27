@@ -3,6 +3,7 @@
    镜像原则：客机把收到的一切按 180° 旋转存储（s→L-s, off→-off, side→1-side, xy→W-x,H-y），
    自己永远是"下方蓝方 side0"，全部现有渲染/HUD 代码无需感知联机。 */
 let NET=null;
+let NET_ICE_OK=false;   /* 本次入房是否成功取到自建中继凭证（诊断面板显示用） */
 const TYPE_KEYS=Object.keys(UNITS);
 /* 弹道类型线材编码表（只可追加，不可重排——索引会写进快照） */
 const PROJ_KINDS=['arrow','dynamite','shell','laser_a','laser_b','laser_t','mortar']; /* 索引进快照，只能往后追加 */
@@ -27,13 +28,31 @@ function netCode(){
 function netSupported(){return location.protocol==='http:'||location.protocol==='https:';}
 function netFx(o){if(G&&G.pvp&&G.pvpHost&&NET)NET.sendFx(o);}
 
+/* 自建 TURN 中继的时限凭证：现签现发、10 分钟过期，密钥只在服务端。
+   拿不到也无所谓——直接退回纯 STUN，成功率回到接入中继之前的水平，绝不阻塞开局。 */
+const ICE_URL='https://wg.littleshark.xin/t/ice';
+async function netFetchIce(){
+  try{
+    const c=new AbortController();
+    const timer=setTimeout(()=>c.abort(),2500);
+    const r=await fetch(ICE_URL,{signal:c.signal,cache:'no-store'});
+    clearTimeout(timer);
+    if(!r.ok)return [];
+    const j=await r.json();
+    return Array.isArray(j.ice)?j.ice:[];
+  }catch(e){return [];}
+}
 async function netOpen(code,role){
   /* role: 'host' | 'guest' | 'spectator' —— 观众只收不发，且不占玩家位 */
   const isHost=role==='host', spectator=role==='spectator';
   const lib=await netLib();
   /* Trystero 自带的 STUN 只有 Google×3 + Cloudflare；部分网络会屏蔽其中几个，
      一旦一个都问不到就拿不到公网地址、必然连不上。turnConfig 是追加而非替换，
-     多备几个不同运营商的（下列均为实测可返回 srflx 的）能显著提高成功率。 */
+     多备几个不同运营商的（下列均为实测可返回 srflx 的）能显著提高成功率。
+     末尾追加自建 TURN：WebRTC 只在直连候选全部失败时才回退到中继，
+     所以能打洞的对局一个字节都不会经过服务器，中继纯粹是兜底。 */
+  const ice=await netFetchIce();
+  NET_ICE_OK=ice.length>0;
   const room=lib.joinRoom({
     appId:'kip-wargame-pvp-v1',
     turnConfig:[
@@ -41,7 +60,7 @@ async function netOpen(code,role){
       {urls:'stun:stun.nextcloud.com:3478'},
       {urls:'stun:stun.miwifi.com:3478'},
       {urls:'stun:stun.chat.bilibili.com:3478'},
-    ],
+    ].concat(ice),
   },'wg-'+code);
   const [sendCmd,onCmd]=room.makeAction('c');
   const [sendSnap,onSnap]=room.makeAction('s');

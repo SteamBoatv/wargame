@@ -31,6 +31,7 @@ const DIAG={
     sig :{t:'信令服务器', s:'wait', d:''},
     stun:{t:'公网地址', s:'wait', d:''},
     nat :{t:'NAT 类型',   s:'wait', d:''},
+    turn:{t:'中继兜底',   s:'wait', d:''},
     peer:{t:'发现对方',   s:'wait', d:''},
     ice :{t:'P2P 打洞',   s:'wait', d:''},
   },
@@ -177,6 +178,12 @@ async function diagStart(){
   for(const k in DIAG.steps){DIAG.steps[k].s='wait';DIAG.steps[k].d='';}
   diagRender();
 
+  /* 中继凭证在 netOpen 里已经取过（NET_ICE_OK），这里只是把结果讲给玩家听 */
+  if(typeof NET_ICE_OK!=='undefined'&&NET_ICE_OK)
+    diagSet('turn','ok','中继服务器可用 —— 直连失败也能打（延迟略高）');
+  else
+    diagSet('turn','warn','中继不可用 —— 只能靠直连打洞');
+
   /* STUN 先跑：信令探测要和 Trystero 抢同一批 broker 的连接，放后面串行做，减少干扰 */
   diagSet('stun','run','测试中…');
   diagSet('nat','run','');
@@ -192,7 +199,10 @@ async function diagStart(){
     diagSet('stun','ok',d+'　'+s.ms+'ms');
     const n=NAT_TXT[s.nat];
     diagSet('nat',n.s,n.d+(s.ports.length>1?'（映射端口 '+s.ports.join(' / ')+'）':''));
-    if(s.nat==='symmetric')DIAG.fatal='你这一侧是对称 NAT。若对方也是对称 NAT，P2P 直连无法建立——本作没有 TURN 中继可回退，换网络（手机热点常为锥形）通常可行。';
+    /* 有中继兜底时，对称 NAT 不再是死刑判决——措辞要跟着变，别吓玩家 */
+    if(s.nat==='symmetric')DIAG.fatal=(typeof NET_ICE_OK!=='undefined'&&NET_ICE_OK)
+      ?'你这一侧是对称 NAT，直连打洞多半失败——会自动改走中继服务器，仍可正常对战（延迟略高）。'
+      :'你这一侧是对称 NAT。若对方也是对称 NAT，P2P 直连无法建立——中继服务器此刻不可用，换网络（手机热点常为锥形）通常可行。';
   }
 
   diagSet('sig','run','测试中…');
@@ -233,7 +243,10 @@ function diagTick(){
     diagSet('ice',s,d);
     const hint=$('diagHint');
     if(hint){
-      if(fail&&!good)hint.textContent='💡 '+(DIAG.fatal||'双方 NAT 都比较严格，直连没能建立。换一方当房主、或改用手机热点通常能解决。');
+      if(fail&&!good)hint.textContent='💡 '+(DIAG.fatal||
+        ((typeof NET_ICE_OK!=='undefined'&&NET_ICE_OK)
+          ?'直连没能建立，正在尝试中继服务器兜底。'
+          :'双方 NAT 都比较严格，直连没能建立。换一方当房主、或改用手机热点通常能解决。'));
       else if(good){
         hint.textContent='';
         const p=ps.find(x=>x.ice==='connected'||x.ice==='completed');
