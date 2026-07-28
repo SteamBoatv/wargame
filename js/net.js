@@ -582,18 +582,23 @@ function netApplySnap(sn){
   const seen={};
   for(const a of sn.us){
     const uid=a[0];
+    /* 对端比本端新时会发来本端 TYPE_KEYS 里不存在的索引。写进 u.type 会让 UNITS[u.type]
+       变成 undefined，drawUnit 第一行就抛异常——而 draw() 没有 try/catch，整个渲染循环
+       每帧停在同一处：画面冻结、HUD 不再刷新，世界却还在变。丢掉这个单位远好过整局报废。 */
+    const tk=TYPE_KEYS[a[1]];
+    if(!tk)continue;
     seen[uid]=1;
     const side=MSIDE(a[2]), s=MS(a[3]), off=MOFF(a[4]), hp=a[5], max=a[6], fl=a[7];
     let u=G._umap[uid];
     if(!u){
-      u={uid,side,type:TYPE_KEYS[a[1]],s,off,hp,max,cd:9,walk:rand(0,6),lunge:0,
+      u={uid,side,type:tk,s,off,hp,max,cd:9,walk:rand(0,6),lunge:0,
          dying:(fl&4)?0.001:0,moving:!!(fl&1),kills:0,vet:vetOfFlag(fl),back:!!(fl&32),
          guard:!!(fl&64),wlv:(fl>>7)&3,recT:(fl&512)?1:0,atkT:9,animT:rand(0,9),_ts:s};
       G._umap[uid]=u;
       G.units.push(u);
     }else{
       u._ts=s;u.off=off;u.hp=hp;u.max=max;
-      u.type=TYPE_KEYS[a[1]];
+      u.type=tk;
       u.moving=!!(fl&1);u.vet=vetOfFlag(fl);u.back=!!(fl&32);u.guard=!!(fl&64);
       u.wlv=(fl>>7)&3;u.recT=(fl&512)?1:0;
       if((fl&8)&&u.atkT>0.5)u.atkT=0;
@@ -630,9 +635,9 @@ function netApplySnap(sn){
   if(!nb.length)G._boomHint=false;
   G.booms=nb;
   const myQ=mir?sn.q1:(sn.q0||sn.q1);
-  G.queue=(myQ||[]).map(a=>({type:TYPE_KEYS[a[0]],t:a[1]/10}));
+  G.queue=(myQ||[]).map(a=>({type:TYPE_KEYS[a[0]],t:a[1]/10})).filter(i=>i.type);
   const foeQ=mir?sn.q0:sn.q1;
-  G.aiQueue=(foeQ||[]).map(a=>({type:TYPE_KEYS[a[0]],t:a[1]/10}));
+  G.aiQueue=(foeQ||[]).map(a=>({type:TYPE_KEYS[a[0]],t:a[1]/10})).filter(i=>i.type);
 }
 
 /* ---- 客机每帧（不模拟战斗，只插值+动画） ---- */

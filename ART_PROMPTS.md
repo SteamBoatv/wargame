@@ -212,7 +212,7 @@ Avoid: photorealistic, 3d render, blurry, text, watermark, blood, gore, characte
 |---|---|---|---|---|
 | `cmdr_marshal.png` | 王国元帅立绘 | 1254² | 168² / 96色 / 19K | ✅ 已接入 |
 | `cmdr_engineer.png` | 机械军团立绘 | 1254² | 168² / 96色 / 20K | ✅ 已接入 |
-| `cmdr_warlord.png` | 掠夺军阀立绘 | 1254² | 168² / 96色 / 20K | 🅿️ 已就位，待第三指挥官实装 |
+| `cmdr_warlord.png` | 掠夺军阀立绘 | 1254² | 168² / 96色 / 20K | ✅ 已实装（掠夺军阀，2026-07-28） |
 | `bg_menu.png` | 主菜单背景 | 1672×941 | 854×481 / 192色 / 265K | ✅ 已接入（主菜单+PvP大厅） |
 | `art_win.png` | 胜利插图 | 1448×1086 | 480×360 / 144色 / 120K | ✅ 已接入 |
 | `art_lose.png` | 失败插图 | 1448×1086 | 480×360 / 144色 / 110K | ✅ 已接入 |
