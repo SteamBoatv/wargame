@@ -176,8 +176,14 @@ body.spectating #queuebar{bottom:calc(18px + env(safe-area-inset-bottom))}
   .side{gap:3px;padding:4px 5px}
   .iconbtn{padding:5px 6px;font-size:13px}
   #topbar{gap:3px}
+  #unitbar{gap:1px;padding-left:calc(4px + env(safe-area-inset-left));padding-right:calc(4px + env(safe-area-inset-right))}
+  .ub{min-width:38px;flex-basis:42px;border-width:6px;padding-left:0;padding-right:0}
+  .ub .bn{font-size:9px}
+  .ub .bc{font-size:10px}
+  canvas.bi{width:26px;height:26px}
+  #queuebar{bottom:calc(112px + env(safe-area-inset-bottom))}
+  #emoteWrap{bottom:calc(118px + env(safe-area-inset-bottom))}
 }
 @media (max-width:390px){
-  #unitbar{gap:3px;padding-left:calc(4px + env(safe-area-inset-left));padding-right:calc(4px + env(safe-area-inset-right))}
-  .ub{min-width:44px}
+  .ub{min-width:38px;flex-basis:41px}
 }

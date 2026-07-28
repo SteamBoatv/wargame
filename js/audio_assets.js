@@ -53,11 +53,18 @@ const TS_UNITS={
 ASSETS.ts={blue:{},black:{},red:{},purple:{},misc:{decos:[]}};
 ASSETS.gob={red:{},purple:{}};
 ASSETS.heroTank={};
+ASSETS.heroRanger={};
 const HERO_TANK_ANIMS={
   idle:{file:'idle',frames:6},drive:{file:'drive',frames:6},turn:{file:'turn',frames:6},
   special:{file:'special',frames:6},moveIn:{file:'move_in',frames:4},moveOut:{file:'move_out',frames:4},
   hurt:{file:'hurt',frames:2},death:{file:'death',frames:4},
   gasStart:{file:'gas_start',frames:8},gasCycle:{file:'gas_cycle',frames:8},gasEnd:{file:'gas_end',frames:8},
+};
+const HERO_RANGER_ANIMS={
+  idle:{file:'Idle',frames:4},walk:{file:'Walk',frames:6},
+  basic:{file:'Attack1',frames:8},volley:{file:'Attack2',frames:6},
+  ram:{file:'Attack3',frames:4},retreat:{file:'Attack4',frames:6},
+  hurt:{file:'Hurt',frames:2},death:{file:'Death',frames:6},bullet:{file:'Bullet',frames:2,cell:6},
 };
 /* 哥布林多行动画表：[行, 帧数] */
 const GOB_META={
@@ -104,6 +111,14 @@ let MUSIC=null, meleeAlt=false, lastCoinS=0;
       if(k==='idle'&&typeof G!=='undefined'&&G&&typeof buildUnitButtons==='function')buildUnitButtons();
     };
     im.src='assets/era3/engineer_tank/'+HERO_TANK_ANIMS[k].file+'.png';
+  }
+  for(const k in HERO_RANGER_ANIMS){
+    const im=new Image();
+    im.onload=()=>{
+      ASSETS.heroRanger[k]=im;
+      if(k==='idle'&&typeof G!=='undefined'&&G&&typeof buildUnitButtons==='function')buildUnitButtons();
+    };
+    im.src='assets/era3/engineer_ranger/'+HERO_RANGER_ANIMS[k].file+'.png';
   }
   const misc={castle_blue:1,castle_red:1,castle_destroyed:1,arrow:1,explosion:1,dynamite:1};
   for(const k in misc){

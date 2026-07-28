@@ -119,32 +119,37 @@ function buildUnitButtons(){
   const cmdr=cmdrOf(0);
   for(const k of cmdr.roster[G?G.era:1]){
     const st=UNITS[k];
+    const label=st.shortName||st.name;
     const b=document.createElement('button');
     b.className='ub'; b.id='btn-'+k; b.type='button';
     let t=st.name+'：生命'+st.hp+(st.heal?' 治疗'+st.heal:' 攻击'+st.dmg)+(st.proj?' 远程':(st.heal?'':' 近战'));
     if(COUNTER[st.cls])t+=' 克:'+Object.keys(COUNTER[st.cls]).map(c=>CLS_NAME[c]).join('/');
     if(st.cls==='tank')t+=' 受箭伤减半';
     if(st.heroTank)t+=' · 短程喷射范围伤害 · 战后自修 · 同时最多1辆';
+    if(st.heroRanger)t+=' · 远距点射/三连发 · 贴身撞击后反推脱离 · 同时最多1辆';
     b.title=t;
     const mIdle=st.mech?(ASSETS.mech&&ASSETS.mech.blue[st.mech+'_idle']):null;
     const hIdle=st.heroTank&&ASSETS.heroTank?ASSETS.heroTank.idle:null;
+    const rIdle=st.heroRanger&&ASSETS.heroRanger?ASSETS.heroRanger.idle:null;
     const set=st.ts?ASSETS.ts[G&&G.era>=2?'black':'blue']:null;
     /* 哥布林是 192px 多行图集，不能套用单行逻辑：单独取 idle 行的第 0 帧 */
     const gSheet=st.gob?((ASSETS.gob&&ASSETS.gob[st.era===2?'purple':'red'])||{})[st.gob]:null;
-    const idle=hIdle||mIdle||(set?set[TS_UNITS[st.ts].idle]:null);
+    const idle=hIdle||rIdle||mIdle||(set?set[TS_UNITS[st.ts].idle]:null);
     if(gSheet){
-      b.innerHTML='<canvas class="be bi" width="40" height="40"></canvas><span class="bn">'+st.name+'</span><span class="bc">💰'+st.cost+'</span>';
+      b.innerHTML='<canvas class="be bi" width="40" height="40"></canvas><span class="bn">'+label+'</span><span class="bc">💰'+st.cost+'</span>';
       const cc=b.querySelector('canvas').getContext('2d');
       cc.imageSmoothingEnabled=false;
       const row=(GOB_META[st.gob]||{idle:[0,1]}).idle[0];
       cc.drawImage(gSheet,192*0.24,row*192+192*0.18,192*0.52,192*0.60,0,0,40,40);
     }else if(idle){
-      b.innerHTML='<canvas class="be bi" width="40" height="40"></canvas><span class="bn">'+st.name+'</span><span class="bc">💰'+st.cost+'</span>';
+      b.innerHTML='<canvas class="be bi" width="40" height="40"></canvas><span class="bn">'+label+'</span><span class="bc">💰'+st.cost+'</span>';
       const cc=b.querySelector('canvas').getContext('2d');
       cc.imageSmoothingEnabled=false;
       const cell=idle.height;
       if(hIdle){
         cc.drawImage(hIdle,10,14,76,76,0,0,40,40);
+      }else if(rIdle){
+        cc.drawImage(rIdle,4,4,64,64,0,0,40,40);
       }else if(mIdle){
         /* 图集格底部才是单位本体，直接整格缩放会画出一大片空白 */
         const mm=MECH_META[st.mech], ch=mm?mm.ch:cell;
@@ -153,7 +158,7 @@ function buildUnitButtons(){
         cc.drawImage(idle,0,cell-ch,cell,ch,(40-dw)/2,40-dh,dw,dh);
       }else cc.drawImage(idle,cell*0.22,cell*0.16,cell*0.56,cell*0.64,0,0,40,40);
     }else{
-      b.innerHTML='<span class="be">'+st.emoji+'</span><span class="bn">'+st.name+'</span><span class="bc">💰'+st.cost+'</span>';
+      b.innerHTML='<span class="be">'+st.emoji+'</span><span class="bn">'+label+'</span><span class="bc">💰'+st.cost+'</span>';
     }
     b.addEventListener('pointerdown',e=>{e.preventDefault();buy(k);});
     bar.appendChild(b);

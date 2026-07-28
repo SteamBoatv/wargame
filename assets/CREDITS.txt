@@ -12,3 +12,8 @@ Art & audio credits (all free licenses):
   Used for the Era III Engineer spray tank. Runtime includes only the selected PNG animations.
   CraftPix free license permits use and modification in commercial games; raw assets may not be
   resold or redistributed as standalone files, and these images must not be used in AI workflows.
+- Free Bosses Pixel Art Sprite Sheet Pack by CraftPix.
+  https://craftpix.net/freebies/free-bosses-pixel-art-sprite-sheet-pack/
+  Used for the Era III Engineer "Peregrine" ranged hero. Runtime includes only its selected green-tank
+  PNG animations and projectile. The same CraftPix free-license and no-standalone-redistribution
+  restrictions apply; these images are not used in AI workflows.

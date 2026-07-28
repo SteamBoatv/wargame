@@ -43,8 +43,10 @@ const UNITS={
   barrel2:{emoji:'💣',name:'爆桶暴徒',cls:'bomb',  gob:'barrel',era:2,w:14,cost:150,hp:262,dmg:78,cd:1,  range:26, speed:85,build:1.8,splash:60},
   /* ---- 时代 III 限量英雄（必须继续追加，勿移动到所属阵营旁边） ----
      hero 独立分类：当前没有 COUNTER 对它提供额外倍率；仍会正常承受所有普通伤害。 */
-  eng_tank3:{emoji:'🛠️',name:'工程喷射坦克',cls:'hero',heroTank:true,era:3,w:8,cost:650,
+  eng_tank3:{emoji:'🛠️',name:'工程喷射坦克',shortName:'喷射坦克',cls:'hero',heroTank:true,era:3,w:8,cost:650,
              hp:1250,dmg:44,cd:1.8,range:84,speed:25,build:12,maxAlive:1,noVet:true},
+  eng_ranger3:{emoji:'🦅',name:'游隼多用途战车',shortName:'游隼战车',cls:'hero',heroRanger:true,era:3,w:7,cost:520,
+               hp:380,dmg:24,cd:0.92,range:310,speed:58,build:9,maxAlive:1,noVet:true,proj:'ranger_bullet'},
 };
 /* 工程喷射坦克的首轮状态机与平衡参数。产品结论及素材缺口的唯一台账：
    docs/ERA3_ASSET_AND_DESIGN_TODO.md */
@@ -56,6 +58,21 @@ const HERO_TANK={
   repairLoop:1.25,repairOpen:0.8,repairClose:0.8,repairCd:9,
   attackStart:0.55,attackCycle:0.70,attackEnd:0.55,
 };
+/* “游隼”是低生命远程英雄。三项能力由自动战术状态机驱动：
+   远距周期三连发；贴身时撞击，随后可反推脱离。入场点火两轮只播动画，不生成弹丸。 */
+const HERO_RANGER={
+  unit:'eng_ranger3',
+  states:['ranger_fly','ranger_startup','ranger_volley','ranger_ram','ranger_retreat'],
+  flyDur:1.55,startupDur:1.12,basicDur:0.56,
+  volleyDur:0.66,volleyShots:[0.16,0.34,0.52],volleyDmg:20,volleyCd:6,
+  ramDur:0.52,ramDmg:72,ramReach:82,ramPush:56,ramCd:5.5,
+  retreatDur:0.70,retreatDmg:34,retreatDist:112,retreatTrigger:78,retreatCd:8,
+};
+/* 联机快照按索引传英雄状态；只能向后追加，不能重排既有坦克状态。 */
+const HERO_STATES=HERO_TANK.states.concat(HERO_RANGER.states);
+const HERO_DEPLOY_STATES=new Set(['airdrop','startup','ranger_fly','ranger_startup']);
+function unitOutOfCombat(u){return !!u&&HERO_DEPLOY_STATES.has(u.heroState||'');}
+function unitInvulnerable(u){return unitOutOfCombat(u)||(u&&u.heroState==='ranger_retreat');}
 const COUNTER={ /* 克制环：剑克枪/建筑 → 枪克盾/爆破/攻城 → 盾挡箭 → 弓克步兵/修士；攻城重克建筑 */
   inf:{spear:1.5,bldg:1.6},
   spear:{tank:1.6,bomb:1.6,siege:1.6},
@@ -83,11 +100,11 @@ const COMMANDERS={
   },
   engineer:{
     icon:'🏗️',art:'assets/art/cmdr_engineer.png',name:'机械军团',
-    desc:'钢铁阵地：路障锁路 · 激光塔火力 · 前线反应堆经济 · 时代 III 空投喷射坦克',
+    desc:'钢铁阵地：路障锁路 · 激光塔火力 · 前线反应堆经济 · 时代 III 双英雄协同',
     income:6,killMult:0.3,mining:false,
     roster:{1:['militia','crossbow','ram'],
             2:['militia2','crossbow2','ram2'],
-            3:['militia2','crossbow2','ram2','eng_tank3']},
+            3:['militia2','crossbow2','ram2','eng_tank3','eng_ranger3']},
     place:['barricade','tower','workshop','strike'],
   },
   /* 第三条经济路线：不投资、不积累，收入靠"把部队压进敌方半场"现抢。

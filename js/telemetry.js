@@ -4,7 +4,7 @@
    上传目标是 Cloudflare 代理的域名——源站真实地址不出现在本仓库任何位置。
    URL 里的 k= 只是防手滑门槛，不是机密；服务端另有大小与结构校验。 */
 const TELE_URL='https://wg.littleshark.xin/t/match?k=wgtl_c243981ea1842800';
-const TELE_VER='2026.07.28-era3-tank-v1'; /* 每次平衡改版随手升级，脏数据全靠它隔离 */
+const TELE_VER='2026.07.28-era3-dual-hero-v2'; /* 每次平衡改版随手升级，脏数据全靠它隔离 */
 const TELE_QKEY='wgTeleQueue';
 let TELE=null;
 

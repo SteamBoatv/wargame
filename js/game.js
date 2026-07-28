@@ -52,6 +52,11 @@ function spawnUnit(side,type){
   if(st.heroTank){
     u.heroState='airdrop';u.heroStateT=0;u.heroCombatT=0;u.heroRepairCd=0;
     u.heroSawCombat=false;u.heroRepairAbort=false;u.cd=HERO_TANK.dropDur+HERO_TANK.startupDur;
+  }else if(st.heroRanger){
+    u.s=side?L-105:105; /* 城门外侧的道路落点，避免 112px 英雄精灵压住城堡主体 */
+    u.heroState='ranger_fly';u.heroStateT=0;u.heroHurtT=0;
+    u.rangerVolleyCd=1.3;u.rangerRamCd=0;u.rangerRetreatCd=0;
+    u.rangerShots=0;u.cd=HERO_RANGER.flyDur+HERO_RANGER.startupDur;
   }
   G.units.push(u);
   sSpawn();
@@ -83,8 +88,8 @@ function bumpStreak(){
 
 function damage(e,dmg,bySide,attacker){
   if(e.dying)return;
-  /* 空投与落地启动是生产完成后的纯演出阶段：尚未进入战场碰撞/伤害集合。 */
-  if(e.heroState==='airdrop'||e.heroState==='startup')return;
+  /* 英雄部署演出尚未进入战场集合；游隼反推期间也无敌。 */
+  if(unitInvulnerable(e))return;
   /* 受击打断回收引导（不退款、恢复产出）：否则"看到红圈点回收"3 秒内要打出 600 伤害
      才拦得住，火力覆盖单轮期望仅 203——回收会变成敌方火力下的无风险撤资 */
   if(e.recT&&UNITS[e.type].cls==='bldg')e.recT=0;
@@ -95,6 +100,8 @@ function damage(e,dmg,bySide,attacker){
       e.heroRepairAbortAt=e.heroState==='repair_loop'
         ?Math.floor((e.heroStateT||0)/HERO_TANK.repairLoop)+1:0;
     }
+  }else if(UNITS[e.type].heroRanger){
+    e.heroHurtT=0.18;
   }
   e.hp-=dmg;
   if(e.hp<=0){
@@ -167,7 +174,7 @@ function rollDmg(st,def,attacker,side){
   return {dmg,counter:m>1,crit};
 }
 function applyDamage(e,r,bySide,attacker){
-  if(e.dying)return;
+  if(e.dying||unitInvulnerable(e))return;
   if(r.crit||r.counter){
     const p=unitPos(e);
     if(r.crit)addFloat(p.x,p.y-58,'暴击'+Math.round(r.dmg)+'!','#ff9040',19);
@@ -184,7 +191,7 @@ function plunderOf(side){
   let sum=0;
   for(const u of G.units){
     if(u.side!==side||u.dying||u.guard||UNITS[u.type].cls==='bldg'||
-       u.heroState==='airdrop'||u.heroState==='startup')continue;
+       unitOutOfCombat(u))continue;
     const d=side?half-u.s:u.s-half;   /* side1 的"敌方半场"在 s 小的一侧，写死会在镜像后反向 */
     if(d>0)sum+=Math.min(1,d/ramp);
   }
@@ -196,7 +203,7 @@ function updateFlags(dt){
   for(const f of G.flags){
     let p=0,a=0;
     for(const u of G.units){
-      if(u.dying||UNITS[u.type].cls==='bldg'||u.heroState==='airdrop'||u.heroState==='startup')continue;
+      if(u.dying||UNITS[u.type].cls==='bldg'||unitOutOfCombat(u))continue;
       if(Math.abs(u.s-f.s)<FLAG_RANGE){if(u.side)a++;else p++;}
     }
     if(p>0&&a===0)f.prog=Math.min(1,f.prog+dt/FLAG_TIME);
@@ -243,16 +250,32 @@ function endGame(r){
   },1100);
 }
 
+function spawnRangerProjectile(u,st,tgt,onBase,dmg){
+  const from=unitPos(u), dir=u.side?-1:1;
+  const x=from.x+from.tx*dir*42;
+  const y=from.y+from.ty*dir*42-62;
+  let to,ts=null;
+  if(onBase){const b=u.side?BASE0:BASE1;to={x:b.x,y:b.y-30};}
+  else{
+    if(!tgt||tgt.dying)return;
+    to=unitPos(tgt);ts=tgt;
+  }
+  G.projs.push({kind:'ranger_bullet',side:u.side,x,y,tx:to.x,ty:to.y-18,tgt:ts,
+    dmg,cls:st.cls,shooter:u,splash:0,sp:610,ang:0,dead:false});
+  sShoot();
+}
 function fire(u,st,tgt,onBase){
   const enemySide=1-u.side;
-  if(st.heroTank){
+  if(st.heroRanger){
+    spawnRangerProjectile(u,st,tgt,onBase,st.dmg);
+  }else if(st.heroTank){
     u.heroSawCombat=true;u.heroCombatT=HERO_TANK.combatQuiet;
     if(onBase)hitBase(enemySide,st.dmg);
     else{
       const dir=u.side?-1:1;
       /* 短射程喷射锥：只扫车头前方和相邻车道，独立 hero 分类不吃任何硬克制倍率。 */
       for(const e of G.units){
-        if(e.side===u.side||e.dying||e.heroState==='airdrop'||e.heroState==='startup')continue;
+        if(e.side===u.side||e.dying||unitOutOfCombat(e))continue;
         const ahead=(e.s-u.s)*dir;
         if(ahead< -8||ahead>st.range+12||Math.abs((e._lat||0)-(u._lat||0))>58)continue;
         const r=rollDmg(st,e,u,u.side);
@@ -332,7 +355,7 @@ function heroSetState(u,state){
 }
 function heroThreatNear(u,st,us){
   for(const e of us){
-    if(e.side===u.side||e.dying||e.heroState==='airdrop'||e.heroState==='startup')continue;
+    if(e.side===u.side||e.dying||unitOutOfCombat(e))continue;
     if(Math.abs((e._lat||0)-(u._lat||0))>62)continue;
     if(Math.abs(e.s-u.s)<=st.range+24)return true;
   }
@@ -407,6 +430,123 @@ function updateHeroTankState(u,st,us,dt){
   }
   return false;
 }
+function rangerClosestTarget(u,maxRange){
+  let best=null,bestScore=1e9;
+  for(const e of G.units){
+    if(e.side===u.side||e.dying||unitOutOfCombat(e))continue;
+    const ds=Math.abs(e.s-u.s);
+    if(ds>maxRange)continue;
+    const score=ds+Math.abs((e._lat||0)-(u._lat||0))*0.3;
+    if(score<bestScore){best=e;bestScore=score;}
+  }
+  return best;
+}
+function rangerRoll(st,u,e,dmg){
+  return rollDmg({...st,dmg},e,u,u.side);
+}
+function startRangerVolley(u,tgt,onBase){
+  heroSetState(u,'ranger_volley');
+  u.rangerTarget=tgt;u.rangerOnBase=!!onBase;u.rangerShots=0;
+  u.rangerVolleyCd=HERO_RANGER.volleyCd;
+}
+function startRangerRam(u,tgt){
+  const dir=u.side?-1:1;
+  heroSetState(u,'ranger_ram');
+  u.rangerTarget=tgt;u.rangerHit=false;u.rangerStartS=u.s;
+  u.rangerPeakS=clamp(u.s+dir*48,35,L-35);
+  u.rangerRamCd=HERO_RANGER.ramCd;
+}
+function startRangerRetreat(u){
+  const dir=u.side?-1:1;
+  heroSetState(u,'ranger_retreat');
+  u.rangerHit=false;u.rangerStartS=u.s;
+  u.rangerEndS=clamp(u.s-dir*HERO_RANGER.retreatDist,95,L-95);
+  u.rangerRetreatCd=HERO_RANGER.retreatCd;
+}
+/* 返回 true 表示游隼当前状态独占本帧，常规索敌、开火和移动全部跳过。 */
+function updateHeroRangerState(u,st,us,dt){
+  u.heroStateT=(u.heroStateT||0)+dt;
+  u.heroHurtT=Math.max(0,(u.heroHurtT||0)-dt);
+  u.rangerVolleyCd=Math.max(0,(u.rangerVolleyCd||0)-dt);
+  u.rangerRamCd=Math.max(0,(u.rangerRamCd||0)-dt);
+  u.rangerRetreatCd=Math.max(0,(u.rangerRetreatCd||0)-dt);
+  const hs=u.heroState||'', ht=u.heroStateT||0;
+  if(hs==='ranger_fly'){
+    if(ht>=HERO_RANGER.flyDur){
+      heroSetState(u,'ranger_startup');
+      const p=unitPos(u);
+      addFloat(p.x,p.y-92,'空载点火 ×2','#76f6e6',15);
+      G.shake=Math.max(G.shake,0.18);
+      sTankLand();
+    }
+    return true;
+  }
+  if(hs==='ranger_startup'){
+    if(ht>=HERO_RANGER.startupDur){
+      heroSetState(u,'');
+      u.cd=0.25;
+      const p=unitPos(u);
+      addFloat(p.x,p.y-90,'武器系统上线','#7dff9b',14);
+    }
+    return true;
+  }
+  if(hs==='ranger_volley'){
+    while(u.rangerShots<HERO_RANGER.volleyShots.length&&
+          ht>=HERO_RANGER.volleyShots[u.rangerShots]){
+      let tgt=u.rangerTarget;
+      if(!u.rangerOnBase&&(!tgt||tgt.dying)){
+        tgt=rangerClosestTarget(u,st.range);
+        u.rangerTarget=tgt;
+      }
+      if(u.rangerOnBase||tgt)spawnRangerProjectile(u,st,tgt,u.rangerOnBase,HERO_RANGER.volleyDmg);
+      u.rangerShots++;
+    }
+    if(ht>=HERO_RANGER.volleyDur){heroSetState(u,'');u.cd=0.34;}
+    return true;
+  }
+  if(hs==='ranger_ram'){
+    const q=clamp(ht/HERO_RANGER.ramDur,0,1);
+    u.s=u.rangerStartS+(u.rangerPeakS-u.rangerStartS)*Math.sin(q*Math.PI);
+    if(!u.rangerHit&&q>=0.42){
+      u.rangerHit=true;
+      const e=u.rangerTarget, dir=u.side?-1:1;
+      if(e&&!e.dying&&Math.abs(e.s-u.s)<=HERO_RANGER.ramReach+28&&
+         Math.abs((e._lat||0)-(u._lat||0))<=62){
+        applyDamage(e,rangerRoll(st,u,e,HERO_RANGER.ramDmg),u.side,u);
+        if(!e.dying&&UNITS[e.type].cls!=='bldg')e.s=clamp(e.s+dir*HERO_RANGER.ramPush,10,L-10);
+        const p=unitPos(e);
+        addFloat(p.x,p.y-62,'撞角截击','#ffd76a',15);
+      }
+      G.shake=Math.max(G.shake,0.16);
+      sHit();
+    }
+    if(q>=1){
+      u.s=u.rangerStartS;
+      if(u.rangerRetreatCd<=0)startRangerRetreat(u);
+      else{heroSetState(u,'');u.cd=0.28;}
+    }
+    return true;
+  }
+  if(hs==='ranger_retreat'){
+    const q=clamp(ht/HERO_RANGER.retreatDur,0,1), eased=1-Math.pow(1-q,3);
+    u.s=u.rangerStartS+(u.rangerEndS-u.rangerStartS)*eased;
+    if(!u.rangerHit&&q>=0.18){
+      u.rangerHit=true;
+      const dir=u.side?-1:1;
+      for(const e of us){
+        if(e.side===u.side||e.dying||unitOutOfCombat(e))continue;
+        if(Math.abs(e.s-u.rangerStartS)>94||Math.abs((e._lat||0)-(u._lat||0))>66)continue;
+        applyDamage(e,rangerRoll(st,u,e,HERO_RANGER.retreatDmg),u.side,u);
+        if(!e.dying&&UNITS[e.type].cls!=='bldg')e.s=clamp(e.s+dir*38,10,L-10);
+      }
+      G.shake=Math.max(G.shake,0.12);
+      sBoom();
+    }
+    if(q>=1){u.s=u.rangerEndS;heroSetState(u,'');u.cd=0.24;}
+    return true;
+  }
+  return false;
+}
 function updateUnits(dt){
   const us=G.units;
   /* 每帧缓存路径横向位置（含岔路分离），供索敌/阻挡/溅射使用 */
@@ -431,12 +571,13 @@ function updateUnits(dt){
     u.atkT+=dt;
     u.lunge=Math.max(0,u.lunge-dt*5);
     if(st.heroTank&&updateHeroTankState(u,st,us,dt))continue;
+    if(st.heroRanger&&updateHeroRangerState(u,st,us,dt))continue;
     /* 修士：不攻击，治疗射程内最残血的友军；无人可治则跟队推进 */
     if(st.cls==='heal'){
       let ally=null,worst=0.999;
       for(const a of us){
         if(a.side!==u.side||a.dying||a===u||UNITS[a.type].cls==='bldg'||
-           a.heroState==='airdrop'||a.heroState==='startup')continue;
+           unitOutOfCombat(a))continue;
         if(Math.abs(a._lat-u._lat)>60)continue;
         if(Math.abs(a.s-u.s)<=st.range){
           const r=a.hp/a.max;
@@ -459,7 +600,7 @@ function updateUnits(dt){
         let blocked=false;
         for(const a of us){
           if(a===u||a.side!==u.side||a.dying||UNITS[a.type].cls==='bldg')continue;
-          if(a.heroState==='airdrop'||a.heroState==='startup')continue;
+          if(unitOutOfCombat(a))continue;
           if(Math.abs(a._lat-u._lat)>=18)continue;
           const gp=(a.s-u.s)*dir;
           if(gp>0&&gp<20){blocked=true;break;}
@@ -479,7 +620,7 @@ function updateUnits(dt){
     let tgt=null, tscore=1e9, tds=1e9;
     for(const e of us){
       if(e.side===u.side||e.dying)continue;
-      if(e.heroState==='airdrop'||e.heroState==='startup')continue;
+      if(unitOutOfCombat(e))continue;
       if((rngEff<=50||st.heroTank)&&Math.abs(e._lat-u._lat)>46)continue; /* 近战不能隔着岔路打 */
       const ds=Math.abs(e.s-u.s);
       if(sight&&ds>sight)continue;                       /* 太远的锁不上 */
@@ -500,6 +641,21 @@ function updateUnits(dt){
           continue;
         }
         u.heroSawCombat=false;
+      }
+    }
+    if(st.heroRanger&&td<=rngEff){
+      const closeLane=tgt&&!onBase&&Math.abs((tgt._lat||0)-(u._lat||0))<=62;
+      if(closeLane&&td<=HERO_RANGER.ramReach&&u.rangerRamCd<=0){
+        startRangerRam(u,tgt);
+        continue;
+      }
+      if(closeLane&&td<=HERO_RANGER.retreatTrigger&&u.rangerRetreatCd<=0){
+        startRangerRetreat(u);
+        continue;
+      }
+      if(u.rangerVolleyCd<=0){
+        startRangerVolley(u,tgt,onBase);
+        continue;
       }
     }
     /* 滚桶兵：接敌自爆，范围伤害 */
@@ -532,7 +688,7 @@ function updateUnits(dt){
       let blocked=false;
       for(const a of us){
         if(a===u||a.side!==u.side||a.dying||UNITS[a.type].cls==='bldg')continue;
-        if(a.heroState==='airdrop'||a.heroState==='startup')continue;
+        if(unitOutOfCombat(a))continue;
         if(Math.abs(a._lat-u._lat)>=18)continue;
         const gp=(a.s-u.s)*dir;
         if(gp>0&&gp<20){blocked=true;break;}
@@ -849,7 +1005,7 @@ function countBldg(side,unitType){
 function frontInstant(side){
   let m=side?L:0;
   for(const u of G.units){
-    if(u.side!==side||u.dying||u.guard||u.heroState==='airdrop'||u.heroState==='startup')continue;
+    if(u.side!==side||u.dying||u.guard||unitOutOfCombat(u))continue;
     m=side?Math.min(m,u.s):Math.max(m,u.s);
   }
   return m;

@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Era III 游隼多用途战车 · 集成验收</title>
+  <style>
+    *{box-sizing:border-box}
+    html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#111;color:#e9fff5;font-family:system-ui,"Microsoft YaHei",sans-serif}
+    iframe{display:block;width:100%;height:100%;border:0}
+    html.mobile body{display:grid;place-items:start center;background:#263d22}
+    html.mobile iframe{width:390px;height:min(844px,100vh)}
+    #qa{position:fixed;z-index:100;top:10px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;
+      max-width:calc(100vw - 16px);padding:8px 12px;border:1px solid #76f6e6;background:rgba(5,22,20,.9);
+      box-shadow:0 4px 24px rgba(0,0,0,.45);font-size:13px;pointer-events:none;white-space:nowrap}
+    html.mobile #qa{max-width:380px;gap:5px;padding:5px 7px;font-size:11px}
+    #qa b{color:#d8ff75}
+    #qa button{pointer-events:auto;border:1px solid #76f6e6;background:#143b32;color:#fff;padding:5px 9px;cursor:pointer}
+  </style>
+</head>
+<body>
+  <iframe id="game" src="../../index.html"></iframe>
+  <div id="qa"><b>游隼自动验收</b><span id="state">载入中…</span><button id="rerun" type="button">重新播放</button></div>
+  <script>
+    const frame=document.querySelector('#game');
+    const state=document.querySelector('#state');
+    const params=new URLSearchParams(location.search);
+    if(params.get('mobile')==='1')document.documentElement.classList.add('mobile');
+    const fastMode=params.get('fast')==='1';
+    const killMode=params.get('kill')==='1';
+    const freezeAt=Math.max(0,Number(params.get('freeze'))||0);
+
+    function startScenario(){
+      frame.contentWindow.eval(`(()=>{
+        if(globalThis.__rangerQaTimers)for(const t of globalThis.__rangerQaTimers){
+          clearTimeout(t);clearInterval(t);
+        }
+        globalThis.__rangerQaTimers=[];
+        mode='play';paused=false;gameSpeed=1;RUN=null;
+        const per={...PVP_PER,queue:0,evolve:false};
+        newGame({per,cmdr0:'engineer',cmdr1:'warlord',events:[],node:{t:'pvp'},
+          aiEra:2,hpMul:1,dmgMul:1,aiIncomeMul:1,mapDef:genMapDef({noFork:true})});
+        G.pvp=false;G.money=9999;G.aiMoney=0;G.xp=9999;G.era=3;G.aiEra=2;
+        ['menu','mapov','pvpov','gameover','pauseov','runover'].forEach(id=>{
+          const e=$(id);if(e)e.classList.add('hidden');
+        });
+        buildUnitButtons();refreshHUD();setFollow(false);
+        spawnUnit(0,HERO_RANGER.unit);
+        const hero=G.units[G.units.length-1];
+        const hp=unitPos(hero);cam.x=hp.x;cam.y=hp.y-125;cam.z=Math.max(cam.z,0.9);clampCam();
+        globalThis.__rangerQa={hero,enemy:null,startupHit:false,startupBlocked:false,enemyHp0:0,meleePlaced:false,killed:false};
+
+        if(${fastMode?'true':'false'}){
+          paused=true;
+          const stepper=setInterval(()=>{
+            if(G&&!G.over){
+              for(let i=0;i<5;i++)update(0.05);
+              draw();refreshHUD();
+              if(${freezeAt}>0&&G.t>=${freezeAt})clearInterval(stepper);
+            }
+          },50);
+          globalThis.__rangerQaTimers.push(stepper);
+        }
+
+        const director=setInterval(()=>{
+          if(!G||hero.dying){clearInterval(director);return}
+          const qa=globalThis.__rangerQa;
+          if(hero.heroState==='ranger_startup'&&!qa.startupHit){
+            qa.startupHit=true;
+            const hp0=hero.hp;
+            damage(hero,95,1,null);
+            qa.startupBlocked=hero.hp===hp0;
+          }
+          if(!qa.enemy&&G.t>=2.9){
+            spawnUnit(1,'ram2');
+            qa.enemy=G.units[G.units.length-1];
+            qa.enemy.s=hero.s+245;qa.enemy.off=hero.off;qa.enemy.hp=520;qa.enemy.max=520;
+            qa.enemyHp0=qa.enemy.hp;
+          }
+          if(qa.enemy&&!qa.enemy.dying&&!qa.meleePlaced&&G.t>=5.8){
+            qa.meleePlaced=true;
+            qa.enemy.s=hero.s+62;qa.enemy.off=hero.off;
+            hero.rangerRamCd=0;hero.rangerRetreatCd=0;
+          }
+          if(${killMode?'true':'false'}&&!qa.killed&&G.t>=8.4){
+            qa.killed=true;
+            damage(hero,9999,1,null);
+            draw();
+          }
+          if(G.t>=10.5)clearInterval(director);
+        },40);
+        globalThis.__rangerQaTimers.push(director);
+      })()`);
+    }
+
+    function showState(){
+      try{
+        const s=frame.contentWindow.eval(`(()=>{
+          if(!G||!globalThis.__rangerQa)return null;
+          const q=globalThis.__rangerQa,h=q.hero,e=q.enemy;
+          return {
+            phase:h.dying?'death':(h.heroState||((h.atkT||9)<HERO_RANGER.basicDur?'basic':(h.moving?'walk':'idle'))),
+            hp:Math.round(h.hp),max:h.max,t:G.t.toFixed(1),projs:G.projs.length,
+            invuln:unitInvulnerable(h),startupBlocked:q.startupBlocked,
+            shots:h.rangerShots||0,enemyHp:e?Math.max(0,Math.round(e.hp)):null
+          };
+        })()`);
+        state.textContent=s
+          ?`t=${s.t}s · ${s.phase} · HP ${s.hp}/${s.max} · 弹体${s.projs} · 连发${s.shots}/3${s.enemyHp===null?'':' · 靶HP '+s.enemyHp}${s.invuln?' · 无敌':''}${s.startupBlocked?' · 点火受击已拦截':''}`
+          :'等待游隼生成';
+      }catch(e){state.textContent='场景初始化失败：'+e.message}
+    }
+
+    let startedDocument=null,bootTimer=null,stateTimer=null;
+    function bootScenario(){
+      clearTimeout(bootTimer);
+      try{
+        const doc=frame.contentDocument;
+        if(!doc||startedDocument===doc)return;
+        const ready=frame.contentWindow.eval(
+          `typeof newGame==='function'&&typeof spawnUnit==='function'&&
+           typeof HERO_RANGER==='object'&&typeof HERO_RANGER_ANIMS==='object'&&
+           typeof ASSETS==='object'&&ASSETS.heroRanger&&
+           Object.keys(HERO_RANGER_ANIMS).every(k=>ASSETS.heroRanger[k]&&
+             ASSETS.heroRanger[k].complete&&ASSETS.heroRanger[k].naturalWidth>0)`
+        );
+        if(!ready){
+          state.textContent='等待游戏脚本与游隼素材加载…';
+          bootTimer=setTimeout(bootScenario,150);
+          return;
+        }
+        startScenario();
+        startedDocument=doc;
+        if(!stateTimer)stateTimer=setInterval(showState,120);
+      }catch(e){
+        state.textContent='等待游戏初始化…';
+        bootTimer=setTimeout(bootScenario,150);
+      }
+    }
+    frame.addEventListener('load',bootScenario);
+    if(frame.contentDocument?.readyState==='complete')bootScenario();
+    document.querySelector('#rerun').addEventListener('click',startScenario);
+  </script>
+</body>
+</html>

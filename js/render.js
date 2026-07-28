@@ -259,23 +259,86 @@ function drawHeroTank(u,p,st,fdir){
   ctx.drawImage(img,fi*96,0,96,96,-dw/2,-dw+8+oy,dw,dw);
   return true;
 }
+function rangerFrame(key,t,dur,loop){
+  const meta=HERO_RANGER_ANIMS[key], n=meta?meta.frames:1;
+  if(loop)return Math.floor(t/dur*n)%n;
+  return Math.min(n-1,Math.floor(clamp(t/dur,0,0.999)*n));
+}
+/* 游隼原图为 72×72 单行图。入场实体始终停在城门战斗坐标，只在渲染层从画面外
+   沿路线后方掠入；这样部署演出不会污染寻路、前线、碰撞与联机位置。 */
+function drawHeroRanger(u,p,st,fdir){
+  const hs=u.heroState||'', ht=u.heroStateT||0;
+  let key='idle',fi=0,ox=0,oy=0;
+  if(u.dying){
+    key='death';fi=rangerFrame(key,u.dying,0.45,false);
+  }else if(hs==='ranger_fly'){
+    const q=clamp(ht/HERO_RANGER.flyDur,0,1), eased=1-Math.pow(1-q,4);
+    const travel=780*(1-eased), dir=u.side?-1:1;
+    ox=-p.tx*dir*travel;
+    oy=-p.ty*dir*travel-86*(1-eased);
+    key='retreat';fi=rangerFrame(key,ht,0.48,true);
+  }else if(hs==='ranger_startup'){
+    key='basic';fi=Math.floor(ht/0.07)%HERO_RANGER_ANIMS.basic.frames;
+  }else if(hs==='ranger_volley'){
+    key='volley';fi=rangerFrame(key,ht,HERO_RANGER.volleyDur,false);
+  }else if(hs==='ranger_ram'){
+    key='ram';fi=rangerFrame(key,ht,HERO_RANGER.ramDur,false);
+  }else if(hs==='ranger_retreat'){
+    key='retreat';fi=rangerFrame(key,ht,HERO_RANGER.retreatDur,false);
+  }else if(u.heroHurtT>0){
+    key='hurt';fi=rangerFrame(key,0.18-u.heroHurtT,0.18,false);
+  }else if((u.atkT||9)<HERO_RANGER.basicDur){
+    key='basic';fi=rangerFrame(key,u.atkT,HERO_RANGER.basicDur,false);
+  }else if(u.moving){
+    key='walk';fi=rangerFrame(key,u.animT||0,0.62,true);
+  }else{
+    key='idle';fi=rangerFrame(key,(G?G.t:0)+(u.off||0)*0.03,0.56,true);
+  }
+  ctx.translate(ox,oy);
+  if(hs==='ranger_fly'){
+    const q=clamp(ht/HERO_RANGER.flyDur,0,1), braking=q>=0.62;
+    const screenDir=p.tx*fdir<0?-1:1;
+    ctx.save();
+    ctx.globalAlpha=0.45+0.25*Math.sin(ht*24);
+    for(let i=0;i<(braking?7:4);i++){
+      const d=52+i*(braking?10:13)+(Math.floor(ht*48+i*7)%7);
+      ctx.fillStyle=i%2?'#76f6e6':'#d8ff75';
+      ctx.fillRect(-screenDir*d,-43+(i%3)*5,screenDir*8,4);
+    }
+    ctx.restore();
+  }
+  if(hs==='ranger_startup'||hs==='ranger_retreat'){
+    const pulse=0.65+0.25*Math.sin((G?G.t:0)*12);
+    ctx.save();ctx.globalAlpha=pulse;ctx.strokeStyle='#76f6e6';ctx.lineWidth=2.5;
+    ctx.beginPath();ctx.ellipse(0,-34,46,40,0,0,TAU);ctx.stroke();ctx.restore();
+  }
+  if(p.tx*fdir<-0.05)ctx.scale(-1,1);
+  const img=ASSETS.heroRanger&&ASSETS.heroRanger[key];
+  if(!img)return false;
+  const dw=112;
+  ctx.drawImage(img,fi*72,0,72,72,-dw/2,-dw+8,dw,dw);
+  return true;
+}
 function drawUnit(u,p){
   const st=UNITS[u.type], dir=u.side?-1:1;
   const fdir=u.back?-dir:dir;   /* 守备队后撤归位时朝向反过来 */
   if(st.cls==='bldg'){drawBuilding(u,p,st);return;}
   const vr=u.vet?VET_RANKS[u.vet]:null;
-  const hero=!!st.heroTank, ew=hero?25:13, eh=hero?8:5;
-  ctx.fillStyle='rgba(0,0,0,.2)';
-  ctx.beginPath(); ctx.ellipse(p.x,p.y+3,ew,eh,0,0,TAU); ctx.fill();
-  ctx.strokeStyle=u.side?'rgba(255,64,64,.75)':'rgba(46,125,255,.75)';
-  ctx.lineWidth=2;
-  ctx.beginPath(); ctx.ellipse(p.x,p.y+3,ew,eh,0,0,TAU); ctx.stroke();
+  const hero=st.cls==='hero', ew=hero?25:13, eh=hero?8:5;
+  const rangerFlying=st.heroRanger&&u.heroState==='ranger_fly';
+  if(!rangerFlying){
+    ctx.fillStyle='rgba(0,0,0,.2)';
+    ctx.beginPath(); ctx.ellipse(p.x,p.y+3,ew,eh,0,0,TAU); ctx.fill();
+    ctx.strokeStyle=u.side?'rgba(255,64,64,.75)':'rgba(46,125,255,.75)';
+    ctx.lineWidth=2;
+    ctx.beginPath(); ctx.ellipse(p.x,p.y+3,ew,eh,0,0,TAU); ctx.stroke();
+  }
   if(st.era===2){
     ctx.strokeStyle='rgba(255,215,106,.9)';
     ctx.lineWidth=1.5;
     ctx.beginPath(); ctx.ellipse(p.x,p.y+3,16,6.5,0,0,TAU); ctx.stroke();
   }
-  if(st.era===3){
+  if(st.era===3&&!rangerFlying){
     ctx.strokeStyle='rgba(65,244,209,.92)';
     ctx.lineWidth=2.5;
     ctx.beginPath();ctx.ellipse(p.x,p.y+3,30,10,0,0,TAU);ctx.stroke();
@@ -311,6 +374,8 @@ function drawUnit(u,p){
   const runImg=set?set[TS_UNITS[st.ts].run]:null;
   if(st.heroTank&&drawHeroTank(u,p,st,fdir)){
     /* 时代 III 工程师英雄 */
+  }else if(st.heroRanger&&drawHeroRanger(u,p,st,fdir)){
+    /* 时代 III 工程师远程英雄 */
   }else if(st.mech&&drawMechUnit(u,p,st,fdir)){
     /* 机械单位已绘制 */
   }else if(gobSheet){
@@ -349,7 +414,7 @@ function drawUnit(u,p){
     ctx.fillText(st.emoji,0,-16);
   }
   ctx.restore();
-  if(!u.dying&&!(hero&&(u.heroState==='airdrop'||u.heroState==='startup'))){
+  if(!u.dying&&!unitOutOfCombat(u)){
     const w=hero?62:34,h=hero?7:5,r=Math.max(0,u.hp/u.max);
     /* 血条跟随精灵实际高度：机械单位按 mpx 缩放，高度差异很大 */
     let by=hero?86:45;
@@ -360,7 +425,7 @@ function drawUnit(u,p){
     }
     ctx.fillStyle='rgba(0,0,0,.45)';
     ctx.fillRect(p.x-w/2-1,p.y-by,w+2,h+2);
-    const repairing=hero&&u.heroState&&u.heroState.startsWith('repair');
+    const repairing=st.heroTank&&u.heroState&&u.heroState.startsWith('repair');
     ctx.fillStyle=repairing?'#3cff78':(u.side?'#ff5a5a':'#43d675');
     ctx.fillRect(p.x-w/2,p.y-by+1,w*r,h);
     if(repairing&&r>0){
@@ -457,6 +522,19 @@ function drawProj(p){
     }else{
       ctx.fillStyle=p.side?'#ffb27a':'#a8e6ff';
       ctx.fillRect(-11,-3,22,6);
+    }
+    ctx.restore();
+    return;
+  }
+  if(p.kind==='ranger_bullet'){
+    ctx.rotate(p.ang);
+    const img=ASSETS.heroRanger&&ASSETS.heroRanger.bullet;
+    if(img){
+      const fi=Math.floor((G?G.t:0)*18)%HERO_RANGER_ANIMS.bullet.frames;
+      ctx.drawImage(img,fi*6,0,6,6,-12,-6,24,12);
+    }else{
+      ctx.fillStyle=p.side?'#ff9a74':'#d8ff75';
+      ctx.fillRect(-10,-3,20,6);
     }
     ctx.restore();
     return;

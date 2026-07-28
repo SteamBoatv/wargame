@@ -6,7 +6,7 @@ let NET=null;
 let NET_ICE_OK=false;   /* 本次入房是否成功取到自建中继凭证（诊断面板显示用） */
 const TYPE_KEYS=Object.keys(UNITS);
 /* 弹道类型线材编码表（只可追加，不可重排——索引会写进快照） */
-const PROJ_KINDS=['arrow','dynamite','shell','laser_a','laser_b','laser_t','mortar']; /* 索引进快照，只能往后追加 */
+const PROJ_KINDS=['arrow','dynamite','shell','laser_a','laser_b','laser_t','mortar','ranger_bullet']; /* 索引进快照，只能往后追加 */
 /* 单位状态位：1=移动 2=老兵 4=死亡 8=攻击 16=精锐（军衔用两位表示） 32=后撤朝向
    64=守备队 128|256=反应堆等级（两位字段 wlv 0~3，解码 (fl>>7)&3——128 不是独立布尔位！）
    512=回收引导中；下一个可用位=1024。
@@ -58,8 +58,9 @@ async function netOpen(code,role){
        旧客户端收到未知指挥官键会直接 TypeError 死锁（不是优雅退化），而 GitHub Pages
        的 JS 默认缓存 10 分钟——不换房间号就会有新旧端在同一个房间里互相拖死。
        v2：新增 warlord 指挥官与 torch2/tnt2/barrel2 三个兵种类型。
-       v3：新增 eng_tank3、第三时代与英雄阶段快照字段。 */
-    appId:'kip-wargame-pvp-v3',
+       v3：新增 eng_tank3、第三时代与英雄阶段快照字段。
+       v4：追加 eng_ranger3、游隼状态与 ranger_bullet 弹体。 */
+    appId:'kip-wargame-pvp-v4',
     turnConfig:[
       {urls:'stun:global.stun.twilio.com:3478'},
       {urls:'stun:stun.nextcloud.com:3478'},
@@ -532,7 +533,7 @@ function netHostSnap(dt){
         Math.round(u.hp),u.max,(u.moving?1:0)|((u.vet||0)>=1?2:0)|(u.dying?4:0)|(u.atkT<0.4?8:0)|
         ((u.vet||0)>=2?16:0)|(u.back?32:0)|(u.guard?64:0)|(((u.wlv||0)&1)?128:0)|
         (((u.wlv||0)&2)?256:0)|(u.recT?512:0),
-        Math.max(0,HERO_TANK.states.indexOf(u.heroState||'')),Math.round((u.heroStateT||0)*10)]),
+        Math.max(0,HERO_STATES.indexOf(u.heroState||'')),Math.round((u.heroStateT||0)*10)]),
       pr:G.projs.map(p=>[p.pid,Math.max(0,PROJ_KINDS.indexOf(p.kind)),
         Math.round(p.x),Math.round(p.y),Math.round(p.ang*100),p.side?1:0]),
       sk:G.strikes.map(k=>[k.side||0,Math.round(k.x),Math.round(k.y),Math.round(k.r),
@@ -593,7 +594,7 @@ function netApplySnap(sn){
     if(!tk)continue;
     seen[uid]=1;
     const side=MSIDE(a[2]), s=MS(a[3]), off=MOFF(a[4]), hp=a[5], max=a[6], fl=a[7];
-    const heroState=HERO_TANK.states[a[8]||0]||'', heroStateT=(a[9]||0)/10;
+    const heroState=HERO_STATES[a[8]||0]||'', heroStateT=(a[9]||0)/10;
     let u=G._umap[uid];
     if(!u){
       u={uid,side,type:tk,s,off,hp,max,cd:9,walk:rand(0,6),lunge:0,
@@ -657,7 +658,7 @@ function netGuestTick(dt){
     u.atkT+=dt;
     if(u._ts!==undefined)u.s+=(u._ts-u.s)*Math.min(1,dt*10);
     if(u.moving){u.animT+=dt;u.walk+=dt*8;}
-    if(UNITS[u.type]&&UNITS[u.type].heroTank)u.heroStateT=(u.heroStateT||0)+dt;
+    if(UNITS[u.type]&&UNITS[u.type].cls==='hero')u.heroStateT=(u.heroStateT||0)+dt;
   }
   G.units=G.units.filter(u=>u.dying<=0.45);
   for(const p of G.projs){

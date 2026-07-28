@@ -1,0 +1,1426 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>工程师时代三 · 第二英雄能力预览</title>
+  <style>
+    :root {
+      --ink: #ecf8ee;
+      --muted: #8fa59c;
+      --panel: rgba(10, 18, 18, 0.92);
+      --panel-solid: #0d1717;
+      --line: #2d4440;
+      --green: #67e66f;
+      --lime: #c8f05b;
+      --cyan: #72e6e3;
+      --orange: #ffb249;
+      --red: #ff665f;
+      --violet: #a58cff;
+      --shadow: rgba(0, 0, 0, 0.46);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      min-height: 100%;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 12% -8%, rgba(70, 203, 98, 0.17), transparent 34rem),
+        radial-gradient(circle at 100% 24%, rgba(72, 173, 180, 0.12), transparent 30rem),
+        #070c0c;
+      font: 14px/1.5 "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+    }
+
+    button {
+      font: inherit;
+    }
+
+    .page {
+      width: min(1480px, calc(100% - 28px));
+      margin: 0 auto;
+      padding: 22px 0 34px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 20px;
+      margin-bottom: 14px;
+    }
+
+    .eyebrow {
+      color: var(--green);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 4px 0 0;
+      font-size: clamp(24px, 3vw, 39px);
+      line-height: 1.05;
+      letter-spacing: -0.045em;
+    }
+
+    .summary {
+      max-width: 590px;
+      margin: 0;
+      color: var(--muted);
+      text-align: right;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 340px;
+      gap: 14px;
+      align-items: start;
+    }
+
+    .playfield {
+      position: relative;
+      min-width: 0;
+      overflow: hidden;
+      border: 1px solid #36514b;
+      border-radius: 18px;
+      background: #0a1313;
+      box-shadow: 0 24px 70px var(--shadow);
+    }
+
+    .canvas-wrap {
+      position: relative;
+      aspect-ratio: 16 / 9;
+      min-height: 420px;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+
+    .hud {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .unit-card {
+      position: absolute;
+      top: 15px;
+      left: 15px;
+      width: min(330px, calc(100% - 150px));
+      padding: 11px 12px;
+      border: 1px solid rgba(104, 229, 113, 0.34);
+      border-radius: 11px;
+      background: rgba(6, 14, 13, 0.84);
+      box-shadow: 0 10px 32px rgba(0, 0, 0, 0.3);
+      backdrop-filter: blur(7px);
+    }
+
+    .unit-name {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 7px;
+      font-weight: 800;
+    }
+
+    .role {
+      color: var(--lime);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+    }
+
+    .bar {
+      height: 8px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 2px;
+      background: #172221;
+    }
+
+    .bar > i {
+      display: block;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, #ff514f, #f0c75b 72%, #74e86f);
+      transform-origin: left;
+    }
+
+    .bar-meta {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 5px;
+      color: #adbfba;
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .status-chip {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      padding: 7px 9px;
+      border: 1px solid rgba(114, 230, 227, 0.28);
+      border-radius: 9px;
+      background: rgba(6, 14, 13, 0.82);
+      color: #b9cfca;
+      font-size: 11px;
+      letter-spacing: 0.05em;
+      backdrop-filter: blur(7px);
+    }
+
+    .callout {
+      position: absolute;
+      top: 27%;
+      left: 50%;
+      opacity: 0;
+      padding: 8px 12px;
+      border: 1px solid currentColor;
+      border-radius: 5px;
+      background: rgba(4, 10, 10, 0.9);
+      color: var(--cyan);
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      transform: translate(-50%, 12px);
+      transition: opacity 120ms ease, transform 160ms ease;
+    }
+
+    .callout.show {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
+
+    .skillbar {
+      position: absolute;
+      right: 16px;
+      bottom: 16px;
+      left: 16px;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      pointer-events: auto;
+    }
+
+    .skill {
+      position: relative;
+      min-width: 0;
+      min-height: 66px;
+      overflow: hidden;
+      padding: 10px 10px 9px 47px;
+      border: 1px solid #39524d;
+      border-radius: 10px;
+      background: rgba(9, 18, 17, 0.94);
+      color: var(--ink);
+      cursor: pointer;
+      text-align: left;
+      transition: border-color 120ms ease, transform 120ms ease, background 120ms ease;
+    }
+
+    .skill:hover,
+    .skill:focus-visible {
+      border-color: var(--green);
+      outline: none;
+      transform: translateY(-2px);
+    }
+
+    .skill:disabled {
+      color: #72827f;
+      cursor: wait;
+      transform: none;
+    }
+
+    .skill .key {
+      position: absolute;
+      top: 11px;
+      left: 10px;
+      display: grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border: 1px solid #58706b;
+      border-radius: 6px;
+      background: #162522;
+      color: var(--lime);
+      font-weight: 900;
+    }
+
+    .skill strong,
+    .skill small {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .skill strong {
+      font-size: 12px;
+    }
+
+    .skill small {
+      margin-top: 3px;
+      color: #91a6a1;
+      font-size: 10px;
+    }
+
+    .cooldown {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: rgba(3, 8, 8, 0.72);
+      color: white;
+      font-size: 19px;
+      font-weight: 900;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .cooldown[hidden] {
+      display: none;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border-top: 1px solid #2e4440;
+      background: #0b1514;
+    }
+
+    .controls button {
+      min-height: 34px;
+      padding: 0 12px;
+      border: 1px solid #36504b;
+      border-radius: 8px;
+      background: #132320;
+      color: #d9e8e4;
+      cursor: pointer;
+    }
+
+    .controls button:hover,
+    .controls button:focus-visible {
+      border-color: var(--cyan);
+      outline: none;
+    }
+
+    .controls .hint {
+      margin-left: auto;
+      color: #748d87;
+      font-size: 11px;
+    }
+
+    aside {
+      display: grid;
+      gap: 12px;
+    }
+
+    .panel {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: linear-gradient(180deg, rgba(17, 29, 28, 0.96), rgba(10, 18, 18, 0.96));
+    }
+
+    .panel-head {
+      padding: 13px 14px 10px;
+      border-bottom: 1px solid #273d39;
+    }
+
+    .panel-head h2 {
+      margin: 2px 0 0;
+      font-size: 16px;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+    }
+
+    .stat {
+      padding: 12px 14px;
+      border-right: 1px solid #243936;
+      border-bottom: 1px solid #243936;
+    }
+
+    .stat:nth-child(2n) {
+      border-right: 0;
+    }
+
+    .stat:nth-last-child(-n + 2) {
+      border-bottom: 0;
+    }
+
+    .stat small,
+    .stat strong {
+      display: block;
+    }
+
+    .stat small {
+      color: #79918b;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .stat strong {
+      margin-top: 2px;
+      font-size: 18px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stat .low {
+      color: var(--red);
+    }
+
+    .stat .high {
+      color: var(--green);
+    }
+
+    .ability-notes {
+      display: grid;
+    }
+
+    .ability-note {
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr);
+      gap: 10px;
+      padding: 11px 13px;
+      border-bottom: 1px solid #243936;
+    }
+
+    .ability-note:last-child {
+      border-bottom: 0;
+    }
+
+    .ability-note .num {
+      display: grid;
+      width: 26px;
+      height: 26px;
+      place-items: center;
+      border: 1px solid #445e58;
+      border-radius: 5px;
+      color: var(--lime);
+      font-weight: 900;
+    }
+
+    .ability-note h3 {
+      margin: 0;
+      font-size: 12px;
+    }
+
+    .ability-note p {
+      margin: 3px 0 0;
+      color: #8ca29d;
+      font-size: 11px;
+    }
+
+    .design-note {
+      padding: 13px 14px 14px;
+      color: #93a8a2;
+      font-size: 11px;
+    }
+
+    .design-note strong {
+      color: #dbeae6;
+    }
+
+    .asset-state {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 13px;
+      border-top: 1px solid #243936;
+      color: #8fa49f;
+      font-size: 10px;
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--orange);
+      box-shadow: 0 0 10px currentColor;
+    }
+
+    .dot.ready {
+      background: var(--green);
+    }
+
+    @media (max-width: 1050px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      aside {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 700px) {
+      .page {
+        width: min(100% - 16px, 1480px);
+        padding-top: 14px;
+      }
+
+      .topbar {
+        align-items: start;
+        flex-direction: column;
+      }
+
+      .summary {
+        text-align: left;
+      }
+
+      .canvas-wrap {
+        min-height: 520px;
+        aspect-ratio: auto;
+      }
+
+      .skillbar {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .unit-card {
+        width: calc(100% - 98px);
+      }
+
+      .status-chip {
+        max-width: 86px;
+        text-align: right;
+      }
+
+      aside {
+        grid-template-columns: 1fr;
+      }
+
+      .controls .hint {
+        width: 100%;
+        margin-left: 0;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .skill,
+      .callout {
+        transition: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">Era III / Engineer / Hero prototype 02</div>
+        <h1>“游隼”多用途战车</h1>
+      </div>
+      <p class="summary">
+        远程游击英雄原型：射程长、位移灵活，靠撞角解决贴身目标；生命值只有第一英雄的约三成，
+        一旦被围住就会迅速损毁。
+      </p>
+    </header>
+
+    <div class="layout">
+      <section class="playfield" aria-label="游隼战车能力演示">
+        <div class="canvas-wrap">
+          <canvas id="battle" width="960" height="540"></canvas>
+
+          <div class="hud">
+            <div class="unit-card">
+              <div class="unit-name">
+                <span>“游隼”多用途战车</span>
+                <span class="role">远程英雄 · 限量 1</span>
+              </div>
+              <div class="bar"><i id="hpFill"></i></div>
+              <div class="bar-meta">
+                <span id="hpText">380 / 380</span>
+                <span id="combatState">自动索敌</span>
+              </div>
+            </div>
+
+            <div id="assetBadge" class="status-chip">正在载入原始精灵条</div>
+            <div id="callout" class="callout">三连校射</div>
+
+            <div class="skillbar" aria-label="能力按钮">
+              <button class="skill" type="button" data-skill="volley">
+                <span class="key">1</span>
+                <strong>三连校射</strong>
+                <small>3 × 20 · 远距集火</small>
+                <span class="cooldown" hidden></span>
+              </button>
+              <button class="skill" type="button" data-skill="ram">
+                <span class="key">2</span>
+                <strong>撞角截击</strong>
+                <small>72 · 击退贴身目标</small>
+                <span class="cooldown" hidden></span>
+              </button>
+              <button class="skill" type="button" data-skill="jet">
+                <span class="key">3</span>
+                <strong>反推越障</strong>
+                <small>34 · 后撤并短暂无敌</small>
+                <span class="cooldown" hidden></span>
+              </button>
+              <button class="skill" type="button" data-skill="reinforce">
+                <span class="key">4</span>
+                <strong>呼叫靶机</strong>
+                <small>补充 3 个测试目标</small>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="controls">
+          <button id="pause" type="button">暂停</button>
+          <button id="reset" type="button">重置战斗</button>
+          <button id="replay" type="button">重播出场</button>
+          <button id="damage" type="button">模拟受击 -95</button>
+          <button id="auto" type="button">自动射击：开</button>
+          <span class="hint">重播出场可观察完整部署 · 键盘 1–4 施放能力 · 空格暂停</span>
+        </div>
+      </section>
+
+      <aside>
+        <section class="panel">
+          <div class="panel-head">
+            <div class="eyebrow">Prototype balance</div>
+            <h2>建议初版数值</h2>
+          </div>
+          <div class="stats">
+            <div class="stat"><small>生命</small><strong class="low">380</strong></div>
+            <div class="stat"><small>射程</small><strong class="high">310</strong></div>
+            <div class="stat"><small>点射伤害</small><strong>24</strong></div>
+            <div class="stat"><small>攻击间隔</small><strong>0.92s</strong></div>
+            <div class="stat"><small>移动速度</small><strong>58</strong></div>
+            <div class="stat"><small>近战伤害</small><strong>72</strong></div>
+          </div>
+          <div class="design-note">
+            <strong>对照：</strong>当前第一英雄“工程喷射坦克”为 1250 生命、84 射程。
+            游隼用约 30% 的生命换取 3.7 倍射程和主动脱离能力。
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div class="eyebrow">Ability mapping</div>
+            <h2>原素材动作映射</h2>
+          </div>
+          <div class="ability-notes">
+            <div class="ability-note">
+              <span class="num">E</span>
+              <div>
+                <h3>城门掠入 · Attack4 + Attack1×2</h3>
+                <p>高速飞至城门前并反推减速；落地后无敌空载点火两次，不生成弹丸，随后接管索敌。</p>
+              </div>
+            </div>
+            <div class="ability-note">
+              <span class="num">A</span>
+              <div>
+                <h3>脉冲点射 · Attack1</h3>
+                <p>自动攻击。每第三发附加“校准”标记，让下一轮弹幕优先锁定该目标。</p>
+              </div>
+            </div>
+            <div class="ability-note">
+              <span class="num">1</span>
+              <div>
+                <h3>三连校射 · Attack2</h3>
+                <p>短蓄力后打出三枚脉冲弹；主远程爆发，6 秒冷却。</p>
+              </div>
+            </div>
+            <div class="ability-note">
+              <span class="num">2</span>
+              <div>
+                <h3>撞角截击 · Attack3</h3>
+                <p>向最近目标短冲并击退。能近战，但会把脆弱车体带进危险区。</p>
+              </div>
+            </div>
+            <div class="ability-note">
+              <span class="num">3</span>
+              <div>
+                <h3>反推越障 · Attack4</h3>
+                <p>喷射后撤并获得 0.7 秒无敌；起跳冲击波会伤害贴身目标。</p>
+              </div>
+            </div>
+          </div>
+          <div class="asset-state">
+            <span id="assetDot" class="dot"></span>
+            <span id="assetText">等待载入 CraftPix 72×72 原始帧</span>
+          </div>
+        </section>
+      </aside>
+    </div>
+  </main>
+
+  <script>
+    "use strict";
+
+    const canvas = document.querySelector("#battle");
+    const ctx = canvas.getContext("2d");
+    const hpFill = document.querySelector("#hpFill");
+    const hpText = document.querySelector("#hpText");
+    const combatState = document.querySelector("#combatState");
+    const callout = document.querySelector("#callout");
+    const assetBadge = document.querySelector("#assetBadge");
+    const assetDot = document.querySelector("#assetDot");
+    const assetText = document.querySelector("#assetText");
+    const pauseButton = document.querySelector("#pause");
+    const autoButton = document.querySelector("#auto");
+
+    const ASSET_ROOT = "../../_era3_preview/craftpix_bosses_261169/extracted/2";
+    const CELL = 72;
+    const ANIMS = {
+      idle: { file: "Idle.png", frames: 4, frameMs: 170, loop: true },
+      walk: { file: "Walk.png", frames: 6, frameMs: 95, loop: true },
+      basic: { file: "Attack1.png", frames: 8, frameMs: 70 },
+      volley: { file: "Attack2.png", frames: 6, frameMs: 85 },
+      ram: { file: "Attack3.png", frames: 4, frameMs: 85 },
+      jet: { file: "Attack4.png", frames: 6, frameMs: 92 },
+      hurt: { file: "Hurt.png", frames: 2, frameMs: 95 },
+      death: { file: "Death.png", frames: 6, frameMs: 150 },
+      sneer: { file: "Sneer.png", frames: 6, frameMs: 130 }
+    };
+
+    const images = {};
+    const cooldownMax = { volley: 6, ram: 5, jet: 8 };
+    const cooldowns = { volley: 0, ram: 0, jet: 0 };
+    const skillButtons = Object.fromEntries(
+      [...document.querySelectorAll("[data-skill]")].map((button) => [button.dataset.skill, button])
+    );
+
+    let state;
+    let lastTime = performance.now();
+    let calloutTimer = 0;
+
+    function makeState() {
+      return {
+        time: 0,
+        playing: true,
+        auto: true,
+        shotCount: 0,
+        events: [],
+        projectiles: [],
+        particles: [],
+        labels: [],
+        enemies: [],
+        hero: {
+          x: -110,
+          y: 253,
+          baseX: 350,
+          hp: 380,
+          maxHp: 380,
+          attackCd: 0.45,
+          state: "idle",
+          stateT: 0,
+          stateDuration: Infinity,
+          invuln: 0,
+          action: null,
+          deploying: false,
+          dead: false
+        }
+      };
+    }
+
+    function spawnWave(silent = false) {
+      const living = state.enemies.filter((enemy) => !enemy.dead).length;
+      const base = Math.max(610, 620 + living * 26);
+      [
+        { lane: -42, hp: 95, speed: 21, color: "#e45c62" },
+        { lane: 12, hp: 135, speed: 17, color: "#f09b4c" },
+        { lane: 58, hp: 80, speed: 28, color: "#a68cff" }
+      ].forEach((spec, index) => {
+        state.enemies.push({
+          x: base + index * 96,
+          y: 351 + spec.lane,
+          hp: spec.hp,
+          maxHp: spec.hp,
+          speed: spec.speed,
+          color: spec.color,
+          attackCd: 0.8 + index * 0.22,
+          flash: 0,
+          slow: 0,
+          mark: 0,
+          dead: false
+        });
+      });
+      if (!silent) showCallout("测试靶机进入战场", "#72e6e3");
+    }
+
+    function startArrival() {
+      const hero = state.hero;
+      hero.x = -110;
+      hero.y = 253;
+      hero.baseX = 300;
+      hero.hp = hero.maxHp;
+      hero.attackCd = 0.45;
+      hero.invuln = 2.67;
+      hero.dead = false;
+      hero.deploying = true;
+      hero.action = {
+        kind: "arrival",
+        phase: "fly",
+        t: 0,
+        duration: 2.67,
+        fxT: 0
+      };
+      state.events = [];
+      state.projectiles = [];
+      setHeroAnim("jet", Infinity);
+      showCallout("画外掠入 · 前往己方城门", "#72e6e3");
+    }
+
+    function resetBattle() {
+      state = makeState();
+      Object.keys(cooldowns).forEach((key) => { cooldowns[key] = 0; });
+      spawnWave(true);
+      spawnWave(true);
+      startArrival();
+      updateHud();
+    }
+
+    function loadAssets() {
+      const entries = Object.entries(ANIMS);
+      let loaded = 0;
+
+      entries.forEach(([key, meta]) => {
+        const image = new Image();
+        images[key] = image;
+        image.decoding = "async";
+        image.addEventListener("load", () => {
+          loaded += 1;
+          assetBadge.textContent = `${loaded} / ${entries.length} 组精灵条就绪`;
+          if (loaded === entries.length) {
+            assetBadge.textContent = "原始 CraftPix 精灵条 · 已就绪";
+            assetDot.classList.add("ready");
+            assetText.textContent = "9 组动作已载入 · 72×72 固定帧格";
+          }
+        });
+        image.addEventListener("error", () => {
+          assetBadge.textContent = `载入失败：${meta.file}`;
+          assetText.textContent = "请确认压缩包已解到 _era3_preview 目录";
+        });
+        image.src = `${ASSET_ROOT}/${meta.file}`;
+      });
+    }
+
+    function schedule(delay, fn) {
+      state.events.push({ at: state.time + delay, fn });
+    }
+
+    function setHeroAnim(key, duration) {
+      const meta = ANIMS[key];
+      state.hero.state = key;
+      state.hero.stateT = 0;
+      state.hero.stateDuration = duration ?? meta.frames * meta.frameMs / 1000;
+    }
+
+    function targetNearest(maxRange = Infinity) {
+      const living = state.enemies.filter((enemy) => !enemy.dead && enemy.hp > 0);
+      living.sort((a, b) => {
+        if ((b.mark > 0) !== (a.mark > 0)) return (b.mark > 0) - (a.mark > 0);
+        return Math.abs(a.x - state.hero.x) - Math.abs(b.x - state.hero.x);
+      });
+      return living.find((enemy) => Math.abs(enemy.x - state.hero.x) <= maxRange) || null;
+    }
+
+    function spawnProjectile(target, damage, color, speed = 560) {
+      if (!target || target.dead) return;
+      const x = state.hero.x + 50;
+      const y = state.hero.y - 70;
+      const dx = target.x - x;
+      const dy = (target.y - 36) - y;
+      const distance = Math.max(1, Math.hypot(dx, dy));
+      state.projectiles.push({
+        x, y,
+        vx: dx / distance * speed,
+        vy: dy / distance * speed,
+        damage,
+        color,
+        target,
+        life: 1.25
+      });
+    }
+
+    function addLabel(x, y, text, color = "#ffffff") {
+      state.labels.push({ x, y, text, color, life: 0.72, maxLife: 0.72 });
+    }
+
+    function damageEnemy(enemy, amount, knockback = 0) {
+      if (!enemy || enemy.dead) return;
+      enemy.hp -= amount;
+      enemy.flash = 0.13;
+      enemy.x += knockback;
+      addLabel(enemy.x, enemy.y - 66, `-${amount}`, amount >= 60 ? "#ffcf61" : "#f3f5df");
+      for (let i = 0; i < 7; i += 1) {
+        state.particles.push({
+          x: enemy.x - 8 + Math.random() * 16,
+          y: enemy.y - 38 + Math.random() * 14,
+          vx: -42 + Math.random() * 84,
+          vy: -75 + Math.random() * 45,
+          life: 0.35 + Math.random() * 0.25,
+          color: enemy.color
+        });
+      }
+      if (enemy.hp <= 0) {
+        enemy.dead = true;
+        enemy.hp = 0;
+        addLabel(enemy.x, enemy.y - 88, "击破", "#67e66f");
+      }
+    }
+
+    function damageHero(amount) {
+      const hero = state.hero;
+      if (hero.dead || hero.invuln > 0) return;
+      hero.hp = Math.max(0, hero.hp - amount);
+      setHeroAnim(hero.hp <= 0 ? "death" : "hurt");
+      addLabel(hero.x, hero.y - 92, `-${amount}`, "#ff665f");
+      if (hero.hp <= 0) {
+        hero.dead = true;
+        hero.action = null;
+        showCallout("脆弱车体已损毁 · 点击重置", "#ff665f");
+      }
+    }
+
+    function basicAttack() {
+      const hero = state.hero;
+      if (hero.dead || hero.action) return;
+      const target = targetNearest(310);
+      if (!target) return;
+
+      state.shotCount += 1;
+      setHeroAnim("basic");
+      schedule(0.28, () => {
+        spawnProjectile(target, 24, "#c8f05b");
+        if (state.shotCount % 3 === 0 && !target.dead) {
+          target.mark = 3.2;
+          addLabel(target.x, target.y - 82, "校准", "#72e6e3");
+        }
+      });
+      hero.attackCd = 0.92;
+    }
+
+    function useVolley() {
+      if (cooldowns.volley > 0 || state.hero.dead || state.hero.action) return;
+      const target = targetNearest(410);
+      if (!target) {
+        showCallout("射程内没有目标", "#ffb249");
+        return;
+      }
+      cooldowns.volley = cooldownMax.volley;
+      setHeroAnim("volley");
+      showCallout("三连校射", "#c8f05b");
+      [0.22, 0.39, 0.56].forEach((delay, index) => {
+        schedule(delay, () => {
+          const preferred = !target.dead ? target : targetNearest(410);
+          spawnProjectile(preferred, 20, index === 2 ? "#72e6e3" : "#c8f05b", 610);
+        });
+      });
+    }
+
+    function useRam() {
+      const hero = state.hero;
+      if (cooldowns.ram > 0 || hero.dead || hero.action) return;
+      const target = targetNearest(370);
+      if (!target) {
+        showCallout("前方没有可截击目标", "#ffb249");
+        return;
+      }
+      cooldowns.ram = cooldownMax.ram;
+      const distance = Math.max(38, target.x - hero.x - 52);
+      const travel = Math.min(318, distance);
+      hero.action = {
+        kind: "ram",
+        t: 0,
+        duration: 0.72,
+        startX: hero.x,
+        peakX: hero.x + travel,
+        hit: false,
+        target
+      };
+      setHeroAnim("ram", 0.72);
+      showCallout("撞角截击", "#ffb249");
+    }
+
+    function useJet() {
+      const hero = state.hero;
+      if (cooldowns.jet > 0 || hero.dead || hero.action) return;
+      cooldowns.jet = cooldownMax.jet;
+      hero.action = {
+        kind: "jet",
+        t: 0,
+        duration: 0.72,
+        startX: hero.x,
+        endX: Math.max(125, hero.x - 105),
+        hit: false
+      };
+      hero.invuln = 0.72;
+      setHeroAnim("jet", 0.72);
+      showCallout("反推越障 · 无敌 0.7s", "#72e6e3");
+    }
+
+    function useSkill(key) {
+      if (!state.playing && key !== "reinforce") return;
+      if (key === "volley") useVolley();
+      if (key === "ram") useRam();
+      if (key === "jet") useJet();
+      if (key === "reinforce") spawnWave();
+    }
+
+    function showCallout(text, color) {
+      callout.textContent = text;
+      callout.style.color = color;
+      callout.classList.add("show");
+      clearTimeout(calloutTimer);
+      calloutTimer = setTimeout(() => callout.classList.remove("show"), 1050);
+    }
+
+    function updateHeroAction(dt) {
+      const hero = state.hero;
+      const action = hero.action;
+      if (!action) return;
+      action.t += dt;
+      const p = Math.min(1, action.t / action.duration);
+
+      if (action.kind === "arrival") {
+        const groundY = 345;
+        const flyDuration = 1.55;
+
+        if (action.t < flyDuration) {
+          const flyP = Math.min(1, action.t / flyDuration);
+          const eased = 1 - Math.pow(1 - flyP, 4);
+          hero.x = -110 + 410 * eased;
+          hero.y = groundY - 92 * (1 - eased);
+          if (flyP >= 0.62 && action.phase !== "brake") {
+            action.phase = "brake";
+            showCallout("反推减速 · 准备着陆", "#c8f05b");
+          }
+        } else {
+          if (action.phase !== "startup") {
+            action.phase = "startup";
+            setHeroAnim("basic", Infinity);
+            showCallout("落地锁定 · 空载点火 ×2", "#72e6e3");
+          }
+          hero.x = 300;
+          hero.y = groundY;
+        }
+
+        action.fxT -= dt;
+        if (action.phase !== "startup" && action.fxT <= 0) {
+          action.fxT = action.phase === "brake" ? 0.026 : 0.05;
+          state.particles.push({
+            x: hero.x - 58,
+            y: hero.y - 34,
+            vx: -105 - Math.random() * 65,
+            vy: -12 + Math.random() * 24,
+            life: 0.34 + Math.random() * 0.24,
+            color: Math.random() > 0.45 ? "#72e6e3" : "#c8f05b"
+          });
+        }
+
+        if (p >= 1) {
+          hero.action = null;
+          hero.deploying = false;
+          hero.invuln = 0;
+          hero.baseX = hero.x;
+          setHeroAnim("idle", Infinity);
+          showCallout("部署完成 · 武器系统上线", "#67e66f");
+        }
+        return;
+      }
+
+      if (action.kind === "ram") {
+        const wave = Math.sin(p * Math.PI);
+        hero.x = action.startX + (action.peakX - action.startX) * wave;
+        if (!action.hit && p >= 0.43) {
+          action.hit = true;
+          const victims = state.enemies.filter(
+            (enemy) => !enemy.dead && Math.abs(enemy.x - hero.x) < 78 && Math.abs(enemy.y - hero.y) < 88
+          );
+          const victim = victims[0] || action.target;
+          if (victim && !victim.dead && Math.abs(victim.x - hero.x) < 105) {
+            damageEnemy(victim, 72, 56);
+            victim.slow = 1.2;
+          }
+        }
+      }
+
+      if (action.kind === "jet") {
+        const eased = 1 - Math.pow(1 - p, 3);
+        hero.x = action.startX + (action.endX - action.startX) * eased;
+        if (!action.hit && p >= 0.28) {
+          action.hit = true;
+          state.enemies
+            .filter((enemy) => !enemy.dead && Math.abs(enemy.x - action.startX) < 120)
+            .forEach((enemy) => {
+              damageEnemy(enemy, 34, 38);
+              enemy.slow = 1.6;
+            });
+        }
+      }
+
+      if (p >= 1) {
+        hero.action = null;
+        hero.baseX = hero.x;
+        setHeroAnim("idle", Infinity);
+      }
+    }
+
+    function update(dt) {
+      state.time += dt;
+      const hero = state.hero;
+      hero.attackCd = Math.max(0, hero.attackCd - dt);
+      hero.invuln = Math.max(0, hero.invuln - dt);
+      hero.stateT += dt;
+
+      Object.keys(cooldowns).forEach((key) => {
+        cooldowns[key] = Math.max(0, cooldowns[key] - dt);
+      });
+
+      const due = state.events.filter((event) => event.at <= state.time);
+      state.events = state.events.filter((event) => event.at > state.time);
+      due.forEach((event) => event.fn());
+
+      updateHeroAction(dt);
+
+      if (!hero.dead && !hero.action && hero.stateDuration !== Infinity && hero.stateT >= hero.stateDuration) {
+        setHeroAnim("idle", Infinity);
+      }
+
+      if (state.auto && !hero.dead && !hero.action && hero.attackCd <= 0) {
+        basicAttack();
+      }
+
+      state.enemies.forEach((enemy) => {
+        if (enemy.dead) return;
+        enemy.flash = Math.max(0, enemy.flash - dt);
+        enemy.slow = Math.max(0, enemy.slow - dt);
+        enemy.mark = Math.max(0, enemy.mark - dt);
+        enemy.attackCd -= dt;
+        if (hero.deploying && hero.action?.phase !== "startup") return;
+        const gap = enemy.x - hero.x;
+        if (!hero.dead && gap > 76) {
+          enemy.x -= enemy.speed * (enemy.slow > 0 ? 0.42 : 1) * dt;
+        } else if (!hero.dead && enemy.attackCd <= 0) {
+          damageHero(enemy.maxHp > 100 ? 26 : 19);
+          enemy.attackCd = enemy.maxHp > 100 ? 1.18 : 0.92;
+        }
+      });
+
+      state.projectiles.forEach((projectile) => {
+        projectile.x += projectile.vx * dt;
+        projectile.y += projectile.vy * dt;
+        projectile.life -= dt;
+        const target = projectile.target;
+        if (!target.dead && Math.hypot(projectile.x - target.x, projectile.y - (target.y - 35)) < 24) {
+          damageEnemy(target, projectile.damage);
+          projectile.life = 0;
+        }
+      });
+      state.projectiles = state.projectiles.filter((projectile) => projectile.life > 0);
+
+      state.particles.forEach((particle) => {
+        particle.x += particle.vx * dt;
+        particle.y += particle.vy * dt;
+        particle.vy += 170 * dt;
+        particle.life -= dt;
+      });
+      state.particles = state.particles.filter((particle) => particle.life > 0);
+
+      state.labels.forEach((label) => {
+        label.y -= 24 * dt;
+        label.life -= dt;
+      });
+      state.labels = state.labels.filter((label) => label.life > 0);
+
+      const living = state.enemies.filter((enemy) => !enemy.dead).length;
+      if (living === 0 && !hero.dead && !state.events.some((event) => event.wave)) {
+        const event = { at: state.time + 1.6, wave: true, fn: spawnWave };
+        state.events.push(event);
+      }
+    }
+
+    function drawPixelRect(x, y, w, h, fill, stroke = "#06100f") {
+      ctx.fillStyle = stroke;
+      ctx.fillRect(Math.round(x) - 2, Math.round(y) - 2, Math.round(w) + 4, Math.round(h) + 4);
+      ctx.fillStyle = fill;
+      ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
+    }
+
+    function drawBackground() {
+      const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      gradient.addColorStop(0, "#10201f");
+      gradient.addColorStop(0.52, "#182b27");
+      gradient.addColorStop(0.53, "#26362e");
+      gradient.addColorStop(1, "#141e1b");
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = "rgba(88, 116, 99, 0.18)";
+      for (let x = -50; x < canvas.width; x += 92) {
+        ctx.fillRect(x, 246, 54, 2);
+        ctx.fillRect(x + 18, 430, 72, 2);
+      }
+
+      ctx.fillStyle = "#31463b";
+      ctx.beginPath();
+      ctx.moveTo(0, 290);
+      ctx.lineTo(canvas.width, 252);
+      ctx.lineTo(canvas.width, 470);
+      ctx.lineTo(0, 455);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = "#496352";
+      ctx.lineWidth = 3;
+      ctx.setLineDash([24, 20]);
+      ctx.beginPath();
+      ctx.moveTo(0, 378);
+      ctx.lineTo(canvas.width, 354);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = "rgba(91, 238, 119, 0.10)";
+      ctx.fillRect(85, 250, 365, 215);
+      ctx.strokeStyle = "rgba(103, 230, 111, 0.23)";
+      ctx.strokeRect(85.5, 250.5, 364, 214);
+
+      ctx.fillStyle = "#243d38";
+      ctx.fillRect(0, 196, 214, 220);
+      ctx.fillStyle = "#36574f";
+      for (let x = 0; x < 214; x += 54) {
+        ctx.fillRect(x, 178, 34, 28);
+      }
+      ctx.fillStyle = "#162824";
+      ctx.fillRect(0, 212, 18, 204);
+      ctx.fillRect(196, 212, 18, 204);
+      ctx.fillStyle = "#07110f";
+      ctx.beginPath();
+      ctx.moveTo(104, 416);
+      ctx.lineTo(104, 306);
+      ctx.arc(156, 306, 52, Math.PI, 0);
+      ctx.lineTo(208, 416);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = "#6d9185";
+      ctx.lineWidth = 4;
+      ctx.stroke();
+      ctx.fillStyle = "#9cbcb2";
+      ctx.fillRect(151, 333, 3, 83);
+      ctx.fillStyle = "#ffe273";
+      ctx.fillRect(74, 276, 8, 8);
+      ctx.fillRect(226, 276, 8, 8);
+      ctx.fillStyle = "rgba(103, 230, 111, 0.78)";
+      ctx.fillRect(212, 286, 4, 132);
+
+      ctx.fillStyle = "#22322d";
+      for (let x = 34; x < canvas.width; x += 126) {
+        ctx.fillRect(x, 468, 54, 5);
+      }
+
+      ctx.fillStyle = "rgba(255,255,255,0.48)";
+      ctx.font = "700 11px Segoe UI, sans-serif";
+      ctx.fillText("己方城门", 113, 244);
+      ctx.fillText("己方机动区", 244, 274);
+      ctx.fillStyle = "rgba(255, 178, 73, 0.52)";
+      ctx.fillText("接敌走廊", 760, 276);
+    }
+
+    function drawEnemy(enemy) {
+      if (enemy.dead) return;
+      ctx.save();
+      if (enemy.flash > 0) ctx.globalAlpha = 0.52;
+      const x = enemy.x;
+      const y = enemy.y;
+
+      drawPixelRect(x - 19, y - 44, 38, 34, enemy.flash > 0 ? "#fff4be" : enemy.color);
+      drawPixelRect(x - 13, y - 59, 26, 16, "#263d43");
+      drawPixelRect(x - 25, y - 12, 15, 13, "#243b39");
+      drawPixelRect(x + 10, y - 12, 15, 13, "#243b39");
+      drawPixelRect(x - 28, y - 39, 8, 23, "#314b46");
+      ctx.fillStyle = "#ffe273";
+      ctx.fillRect(Math.round(x + 5), Math.round(y - 53), 5, 4);
+
+      if (enemy.mark > 0) {
+        ctx.strokeStyle = "#72e6e3";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(Math.round(x - 32), Math.round(y - 69), 64, 62);
+        ctx.fillStyle = "#72e6e3";
+        ctx.fillRect(Math.round(x - 32), Math.round(y - 69), 12, 2);
+        ctx.fillRect(Math.round(x + 20), Math.round(y - 69), 12, 2);
+      }
+
+      const hpRatio = enemy.hp / enemy.maxHp;
+      ctx.fillStyle = "#111a19";
+      ctx.fillRect(Math.round(x - 26), Math.round(y - 78), 52, 5);
+      ctx.fillStyle = hpRatio < 0.35 ? "#ff665f" : enemy.color;
+      ctx.fillRect(Math.round(x - 25), Math.round(y - 77), Math.round(50 * hpRatio), 3);
+      ctx.restore();
+    }
+
+    function drawHero() {
+      const hero = state.hero;
+      const meta = ANIMS[hero.state] || ANIMS.idle;
+      const image = images[hero.state] || images.idle;
+      const frame = hero.state === "death"
+        ? Math.min(meta.frames - 1, Math.floor(hero.stateT * 1000 / meta.frameMs))
+        : Math.floor(hero.stateT * 1000 / meta.frameMs) % meta.frames;
+
+      ctx.save();
+      if (hero.invuln > 0 && Math.floor(state.time * 20) % 2 === 0) ctx.globalAlpha = 0.56;
+      if (image && image.complete && image.naturalWidth > 0) {
+        const size = 176;
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(
+          image,
+          frame * CELL, 0, CELL, CELL,
+          Math.round(hero.x - size / 2),
+          Math.round(hero.y - size),
+          size, size
+        );
+      } else {
+        drawPixelRect(hero.x - 52, hero.y - 78, 104, 72, "#54c95a");
+      }
+      ctx.restore();
+
+      if (hero.invuln > 0) {
+        ctx.strokeStyle = `rgba(114, 230, 227, ${0.35 + hero.invuln * 0.45})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.ellipse(hero.x, hero.y - 61, 66, 54, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+
+    function render() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawBackground();
+
+      const sorted = [...state.enemies.filter((enemy) => !enemy.dead), { hero: true, y: state.hero.y }]
+        .sort((a, b) => a.y - b.y);
+      sorted.forEach((item) => item.hero ? drawHero() : drawEnemy(item));
+
+      state.projectiles.forEach((projectile) => {
+        ctx.fillStyle = "#061110";
+        ctx.fillRect(Math.round(projectile.x) - 7, Math.round(projectile.y) - 3, 14, 6);
+        ctx.fillStyle = projectile.color;
+        ctx.fillRect(Math.round(projectile.x) - 5, Math.round(projectile.y) - 2, 10, 4);
+        ctx.fillStyle = "rgba(200, 240, 91, 0.22)";
+        ctx.fillRect(Math.round(projectile.x) - 14, Math.round(projectile.y) - 1, 9, 2);
+      });
+
+      state.particles.forEach((particle) => {
+        ctx.globalAlpha = Math.min(1, particle.life * 3);
+        ctx.fillStyle = particle.color;
+        ctx.fillRect(Math.round(particle.x), Math.round(particle.y), 4, 4);
+      });
+      ctx.globalAlpha = 1;
+
+      state.labels.forEach((label) => {
+        ctx.globalAlpha = Math.min(1, label.life / 0.22);
+        ctx.fillStyle = "rgba(3, 9, 8, 0.86)";
+        ctx.fillRect(Math.round(label.x - 22), Math.round(label.y - 14), 44, 18);
+        ctx.fillStyle = label.color;
+        ctx.font = "800 12px Segoe UI, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(label.text, Math.round(label.x), Math.round(label.y));
+      });
+      ctx.globalAlpha = 1;
+      ctx.textAlign = "left";
+    }
+
+    function updateHud() {
+      const hero = state.hero;
+      const ratio = hero.hp / hero.maxHp;
+      hpFill.style.transform = `scaleX(${ratio})`;
+      hpText.textContent = `${Math.ceil(hero.hp)} / ${hero.maxHp}`;
+      if (hero.dead) {
+        combatState.textContent = "单位损毁";
+      } else if (hero.deploying) {
+        const phase = hero.action?.phase;
+        if (phase === "fly") combatState.textContent = "高速掠入";
+        else if (phase === "brake") combatState.textContent = "反推减速";
+        else {
+          const cycleMs = ANIMS.basic.frames * ANIMS.basic.frameMs;
+          const cycle = Math.min(2, Math.floor(hero.stateT * 1000 / cycleMs) + 1);
+          combatState.textContent = `无敌点火 ${cycle} / 2`;
+        }
+      } else if (hero.invuln > 0) {
+        combatState.textContent = "反推无敌";
+      } else if (hero.action?.kind === "ram") {
+        combatState.textContent = "近战截击";
+      } else {
+        combatState.textContent = state.auto ? "自动索敌" : "手动待命";
+      }
+
+      Object.entries(skillButtons).forEach(([key, button]) => {
+        if (!(key in cooldowns)) return;
+        const overlay = button.querySelector(".cooldown");
+        const remaining = cooldowns[key];
+        button.disabled = remaining > 0 || hero.dead || hero.deploying;
+        overlay.hidden = remaining <= 0;
+        overlay.textContent = remaining > 0 ? remaining.toFixed(1) : "";
+      });
+    }
+
+    function loop(now) {
+      const dt = Math.min(0.035, Math.max(0, (now - lastTime) / 1000));
+      lastTime = now;
+      if (state.playing) update(dt);
+      render();
+      updateHud();
+      requestAnimationFrame(loop);
+    }
+
+    Object.entries(skillButtons).forEach(([key, button]) => {
+      button.addEventListener("click", () => useSkill(key));
+    });
+
+    pauseButton.addEventListener("click", () => {
+      state.playing = !state.playing;
+      pauseButton.textContent = state.playing ? "暂停" : "继续";
+      lastTime = performance.now();
+    });
+
+    autoButton.addEventListener("click", () => {
+      state.auto = !state.auto;
+      autoButton.textContent = `自动射击：${state.auto ? "开" : "关"}`;
+      updateHud();
+    });
+
+    document.querySelector("#reset").addEventListener("click", resetBattle);
+    document.querySelector("#replay").addEventListener("click", resetBattle);
+    document.querySelector("#damage").addEventListener("click", () => damageHero(95));
+
+    document.addEventListener("keydown", (event) => {
+      if (event.target.matches("button, input, select")) return;
+      if (event.code === "Space") {
+        event.preventDefault();
+        pauseButton.click();
+      }
+      if (event.key === "1") useSkill("volley");
+      if (event.key === "2") useSkill("ram");
+      if (event.key === "3") useSkill("jet");
+      if (event.key === "4") useSkill("reinforce");
+    });
+
+    resetBattle();
+    loadAssets();
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
