@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>🏰 皇城对决</title>
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/style.css?v=20260728a">
 </head>
 <body>
 <canvas id="cv"></canvas>
@@ -149,17 +149,21 @@
   </div>
 </div>
 
-<script src="js/core.js"></script>
-<script src="js/data.js"></script>
-<script src="js/world.js"></script>
-<script src="js/camera.js"></script>
-<script src="js/audio_assets.js"></script>
-<script src="js/game.js"></script>
-<script src="js/render.js"></script>
-<script src="js/ui.js"></script>
-<script src="js/net.js"></script>
-<script src="js/netdiag.js"></script>
-<script src="js/telemetry.js"></script>
-<script src="js/main.js"></script>
+<!-- ?v= 缓存串：GitHub Pages 给 JS 的缓存是 10 分钟，不加它会出现
+     "HTML 已更新、JS 还是旧的"这种最难查的混版状态。
+     改动线材协议时（UNITS 顺序 / COMMANDERS 键 / 快照字段）连同 net.js 的 appId
+     与 telemetry.js 的 TELE_VER 一起升，三者保持同步。 -->
+<script src="js/core.js?v=20260728a"></script>
+<script src="js/data.js?v=20260728a"></script>
+<script src="js/world.js?v=20260728a"></script>
+<script src="js/camera.js?v=20260728a"></script>
+<script src="js/audio_assets.js?v=20260728a"></script>
+<script src="js/game.js?v=20260728a"></script>
+<script src="js/render.js?v=20260728a"></script>
+<script src="js/ui.js?v=20260728a"></script>
+<script src="js/net.js?v=20260728a"></script>
+<script src="js/netdiag.js?v=20260728a"></script>
+<script src="js/telemetry.js?v=20260728a"></script>
+<script src="js/main.js?v=20260728a"></script>
 </body>
 </html>
