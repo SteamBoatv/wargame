@@ -5,3 +5,7 @@ assets/art/raw/
 # 第三时代素材预览（临时，不进仓库）
 _era3_preview/
 _aitest/*.png
+
+# Python 本地运行缓存
+__pycache__/
+*.pyc

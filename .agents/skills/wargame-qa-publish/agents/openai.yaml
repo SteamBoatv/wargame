@@ -1,0 +1,4 @@
+interface:
+  display_name: "Wargame 临时验收"
+  short_description: "通过临时 HTTPS 链路分享本地验收页面"
+  default_prompt: "使用 $wargame-qa-publish 临时分享当前 Wargame HTML 验收页面，并在我确认后关闭链接。"

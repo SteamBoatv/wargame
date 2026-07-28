@@ -1,0 +1,857 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CraftPix 绿色攻城坦克 · 多动作验收</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #eef6f4;
+      --muted: #94a9a5;
+      --panel: #111b1d;
+      --panel-strong: #162326;
+      --line: #294044;
+      --green: #63d987;
+      --cyan: #67d8dd;
+      --orange: #f7ad3d;
+      --danger: #ff766f;
+      --stage-size: 96px;
+      --stage-bg: #071012;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 16% 0%, rgba(58, 183, 126, 0.16), transparent 32rem),
+        radial-gradient(circle at 92% 16%, rgba(72, 159, 186, 0.12), transparent 28rem),
+        #080d0f;
+      color: var(--ink);
+      font: 15px/1.55 "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+
+    button,
+    select,
+    input {
+      font: inherit;
+    }
+
+    main {
+      width: min(1240px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 38px 0 60px;
+    }
+
+    header {
+      display: grid;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .eyebrow {
+      color: var(--green);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(30px, 5vw, 52px);
+      line-height: 1.06;
+      letter-spacing: -0.04em;
+    }
+
+    header p {
+      max-width: 840px;
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .facts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .fact {
+      padding: 5px 10px;
+      border: 1px solid #315053;
+      border-radius: 999px;
+      background: rgba(19, 34, 36, 0.82);
+      color: #b9cfcb;
+      font-size: 12px;
+    }
+
+    .fact strong {
+      color: var(--ink);
+    }
+
+    .toolbar {
+      position: sticky;
+      top: 12px;
+      z-index: 5;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px 14px;
+      padding: 13px;
+      margin-bottom: 26px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(13, 23, 25, 0.94);
+      box-shadow: 0 14px 38px rgba(0, 0, 0, 0.32);
+      backdrop-filter: blur(12px);
+    }
+
+    button,
+    select {
+      min-height: 38px;
+      border: 1px solid #355155;
+      border-radius: 9px;
+      background: #17282b;
+      color: var(--ink);
+    }
+
+    button {
+      padding: 0 14px;
+      cursor: pointer;
+    }
+
+    button:hover,
+    button:focus-visible,
+    select:focus-visible,
+    input:focus-visible {
+      border-color: var(--cyan);
+      outline: none;
+    }
+
+    button.primary {
+      min-width: 94px;
+      border-color: #3e9e62;
+      background: #55c67a;
+      color: #07110b;
+      font-weight: 800;
+    }
+
+    .control {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .control select {
+      padding: 0 28px 0 10px;
+    }
+
+    .control input[type="range"] {
+      width: 140px;
+      accent-color: var(--green);
+    }
+
+    .speed-value {
+      width: 58px;
+      color: var(--ink);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 16px;
+      margin: 0 0 12px;
+    }
+
+    .section-head h2 {
+      margin: 0;
+      font-size: 22px;
+    }
+
+    .section-head p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      text-align: right;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .card {
+      min-width: 0;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: linear-gradient(180deg, #152225 0%, #0f181a 100%);
+    }
+
+    .card.reference {
+      border-color: #695530;
+      background: linear-gradient(180deg, #231f18 0%, #171611 100%);
+    }
+
+    .card.effect {
+      border-color: #245b5c;
+    }
+
+    .card-head {
+      display: grid;
+      gap: 3px;
+      min-height: 106px;
+      padding: 15px 16px 12px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .tag {
+      width: fit-content;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: rgba(99, 217, 135, 0.13);
+      color: #8ce4a7;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.07em;
+    }
+
+    .effect .tag {
+      background: rgba(103, 216, 221, 0.12);
+      color: #91e7ea;
+    }
+
+    .reference .tag {
+      background: rgba(247, 173, 61, 0.12);
+      color: #ffc96f;
+    }
+
+    .card h3 {
+      margin: 3px 0 0;
+      font-size: 18px;
+    }
+
+    .meta {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .stage-wrap {
+      display: grid;
+      min-height: 230px;
+      place-items: center;
+      padding: 28px 16px 18px;
+      background-color: var(--stage-bg);
+      background-image: none;
+      transition: background-color 120ms ease;
+    }
+
+    body.checker .stage-wrap {
+      background-color: #141d20;
+      background-image:
+        linear-gradient(45deg, #223034 25%, transparent 25%),
+        linear-gradient(-45deg, #223034 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #223034 75%),
+        linear-gradient(-45deg, transparent 75%, #223034 75%);
+      background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+      background-size: 16px 16px;
+    }
+
+    body.light .stage-wrap {
+      background-color: #b4c1bf;
+      background-image: none;
+    }
+
+    canvas {
+      width: var(--stage-size);
+      height: var(--stage-size);
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+
+    .frame-state {
+      padding: 10px 15px 12px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .frame-state strong {
+      color: var(--ink);
+    }
+
+    .error {
+      color: var(--danger);
+    }
+
+    details {
+      margin-top: 26px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: rgba(15, 24, 26, 0.82);
+    }
+
+    summary {
+      padding: 16px 18px;
+      cursor: pointer;
+      color: #c4d8d4;
+      font-weight: 700;
+    }
+
+    .details-inner {
+      padding: 2px 14px 16px;
+    }
+
+    .reference-section {
+      margin-top: 28px;
+    }
+
+    .notes {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-top: 24px;
+    }
+
+    .note {
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #101a1c;
+    }
+
+    .note h3 {
+      margin: 0 0 7px;
+      font-size: 15px;
+    }
+
+    .note p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    @media (max-width: 1040px) {
+      .grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 640px) {
+      main {
+        width: min(100% - 20px, 1240px);
+        padding-top: 24px;
+      }
+
+      .grid,
+      .notes {
+        grid-template-columns: 1fr;
+      }
+
+      .section-head {
+        align-items: start;
+        flex-direction: column;
+      }
+
+      .section-head p {
+        text-align: left;
+      }
+
+      .stage-wrap {
+        min-height: 210px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="eyebrow">CraftPix / Siege Tank / Animation QA</div>
+      <h1>绿色攻城坦克 · 多动作验收</h1>
+      <p>
+        直接播放素材包中的原始精灵条，不做插帧或生成式修改。
+        所有主体动作使用统一的 96×96 帧格和底部锚点，方便判断动作强弱、循环连续性与 80px 游戏尺寸下的可读性。
+      </p>
+      <div class="facts">
+        <span class="fact"><strong>96×96</strong> 原始帧格</span>
+        <span class="fact"><strong>底部锚点稳定</strong> y = 95</span>
+        <span class="fact"><strong>8 组</strong> 坦克动作</span>
+        <span class="fact"><strong>3 组</strong> 毒气效果</span>
+        <span class="fact">PNG + PSD 源文件</span>
+      </div>
+    </header>
+
+    <section class="toolbar" aria-label="动画控制">
+      <button id="play" class="primary" type="button">暂停</button>
+      <button id="prev" type="button" aria-label="上一帧">← 上一帧</button>
+      <button id="next" type="button" aria-label="下一帧">下一帧 →</button>
+
+      <label class="control">
+        速度
+        <input id="speed" type="range" min="70" max="500" step="10" value="150">
+        <span id="speedValue" class="speed-value">150 ms</span>
+      </label>
+
+      <label class="control">
+        尺寸
+        <select id="size">
+          <option value="80">80px 游戏观察</option>
+          <option value="96" selected>96px 原始尺寸</option>
+          <option value="144">144px</option>
+          <option value="192">192px 放大检查</option>
+        </select>
+      </label>
+
+      <label class="control">
+        背景
+        <select id="background">
+          <option value="dark" selected>深色</option>
+          <option value="checker">透明棋盘</option>
+          <option value="light">浅色</option>
+        </select>
+      </label>
+    </section>
+
+    <section aria-labelledby="tankActionsTitle">
+      <div class="section-head">
+        <div>
+          <div class="eyebrow">主体动作</div>
+          <h2 id="tankActionsTitle">坦克本体</h2>
+        </div>
+        <p>转向采用往返播放；死亡动作播放完会停留两拍。</p>
+      </div>
+
+      <div class="grid">
+        <article class="card">
+          <div class="card-head">
+            <div class="tag">循环</div>
+            <h3>待机 · Idle</h3>
+            <div class="meta">6 帧 · 炮口与指示灯轻微活动</div>
+          </div>
+          <div class="stage-wrap"><canvas id="tankIdle" width="96" height="96"></canvas></div>
+          <div id="tankIdleState" class="frame-state">正在载入…</div>
+        </article>
+
+        <article class="card">
+          <div class="card-head">
+            <div class="tag">循环</div>
+            <h3>行驶 · Drive</h3>
+            <div class="meta">6 帧 · 履带和车身运动</div>
+          </div>
+          <div class="stage-wrap"><canvas id="tankDrive" width="96" height="96"></canvas></div>
+          <div id="tankDriveState" class="frame-state">正在载入…</div>
+        </article>
+
+        <article class="card">
+          <div class="card-head">
+            <div class="tag">往返</div>
+            <h3>转向 · Turn</h3>
+            <div class="meta">6 帧 · 侧面、正面和另一侧</div>
+          </div>
+          <div class="stage-wrap"><canvas id="tankTurn" width="96" height="96"></canvas></div>
+          <div id="tankTurnState" class="frame-state">正在载入…</div>
+        </article>
+
+        <article class="card">
+          <div class="card-head">
+            <div class="tag">循环</div>
+            <h3>特殊动作 · Special</h3>
+            <div class="meta">6 帧 · 驾驶员探出并操作装置</div>
+          </div>
+          <div class="stage-wrap"><canvas id="tankSpecial" width="96" height="96"></canvas></div>
+          <div id="tankSpecialState" class="frame-state">正在载入…</div>
+        </article>
+
+        <article class="card">
+          <div class="card-head">
+            <div class="tag">循环</div>
+            <h3>进入姿态 · Move In</h3>
+            <div class="meta">4 帧 · 炮台展开到战斗位置</div>
+          </div>
+          <div class="stage-wrap"><canvas id="tankMoveIn" width="96" height="96"></canvas></div>
+          <div id="tankMoveInState" class="frame-state">正在载入…</div>
+        </article>
+
+        <article class="card">
+          <div class="card-head">
+            <div class="tag">循环</div>
+            <h3>退出姿态 · Move Out</h3>
+            <div class="meta">4 帧 · 炮台收回与复位</div>
+          </div>
+          <div class="stage-wrap"><canvas id="tankMoveOut" width="96" height="96"></canvas></div>
+          <div id="tankMoveOutState" class="frame-state">正在载入…</div>
+        </article>
+
+        <article class="card">
+          <div class="card-head">
+            <div class="tag">循环</div>
+            <h3>受击 · Hurt</h3>
+            <div class="meta">2 帧 · 快速反馈，适合叠加闪白</div>
+          </div>
+          <div class="stage-wrap"><canvas id="tankHurt" width="96" height="96"></canvas></div>
+          <div id="tankHurtState" class="frame-state">正在载入…</div>
+        </article>
+
+        <article class="card">
+          <div class="card-head">
+            <div class="tag">播放后停留</div>
+            <h3>死亡 · Death</h3>
+            <div class="meta">4 帧 · 炮台塌缩，最终帧停留</div>
+          </div>
+          <div class="stage-wrap"><canvas id="tankDeath" width="96" height="96"></canvas></div>
+          <div id="tankDeathState" class="frame-state">正在载入…</div>
+        </article>
+      </div>
+    </section>
+
+    <details open>
+      <summary>毒气攻击效果（独立效果图，不包含坦克本体）</summary>
+      <div class="details-inner">
+        <div class="grid">
+          <article class="card effect">
+            <div class="card-head">
+              <div class="tag">效果启动</div>
+              <h3>喷射形成 · Gas Start</h3>
+              <div class="meta">8 帧 · 从小型气团逐渐扩张</div>
+            </div>
+            <div class="stage-wrap"><canvas id="gasStart" width="96" height="96"></canvas></div>
+            <div id="gasStartState" class="frame-state">正在载入…</div>
+          </article>
+
+          <article class="card effect">
+            <div class="card-head">
+              <div class="tag">效果循环</div>
+              <h3>持续喷射 · Gas Cycle</h3>
+              <div class="meta">8 帧 · 连续烟团，用于攻击持续段</div>
+            </div>
+            <div class="stage-wrap"><canvas id="gasCycle" width="96" height="96"></canvas></div>
+            <div id="gasCycleState" class="frame-state">正在载入…</div>
+          </article>
+
+          <article class="card effect">
+            <div class="card-head">
+              <div class="tag">效果收尾</div>
+              <h3>烟雾消散 · Gas End</h3>
+              <div class="meta">8 帧 · 从完整烟团逐步消失</div>
+            </div>
+            <div class="stage-wrap"><canvas id="gasEnd" width="96" height="96"></canvas></div>
+            <div id="gasEndState" class="frame-state">正在载入…</div>
+          </article>
+        </div>
+      </div>
+    </details>
+
+    <section class="reference-section" aria-labelledby="referenceTitle">
+      <div class="section-head">
+        <div>
+          <div class="eyebrow">尺寸与运动参照</div>
+          <h2 id="referenceTitle">当前候选对比</h2>
+        </div>
+        <p>切换到 80px，可以直接比较游戏内预期可读性。</p>
+      </div>
+
+      <div class="grid">
+        <article class="card reference">
+          <div class="card-head">
+            <div class="tag">当前 v5</div>
+            <h3>分部件增强动画</h3>
+            <div class="meta">6 帧 · 192×192 帧格</div>
+          </div>
+          <div class="stage-wrap"><canvas id="v5Enhanced" width="96" height="96"></canvas></div>
+          <div id="v5EnhancedState" class="frame-state">正在载入…</div>
+        </article>
+
+        <article class="card reference">
+          <div class="card-head">
+            <div class="tag">现有素材库</div>
+            <h3>Foozle Mecha Boss</h3>
+            <div class="meta">8 帧 · 80×80 帧格</div>
+          </div>
+          <div class="stage-wrap"><canvas id="foozleMecha" width="96" height="96"></canvas></div>
+          <div id="foozleMechaState" class="frame-state">正在载入…</div>
+        </article>
+      </div>
+    </section>
+
+    <section class="notes">
+      <div class="note">
+        <h3>优先观察</h3>
+        <p>先看履带底部是否稳定，再看炮台、驾驶员和灯光是否在帧间突然变形。</p>
+      </div>
+      <div class="note">
+        <h3>动作强弱</h3>
+        <p>重点判断行驶、转向和特殊动作是否足以表达英雄单位，而不只是普通载具。</p>
+      </div>
+      <div class="note">
+        <h3>操作</h3>
+        <p>空格播放或暂停；左右方向键逐帧；工具栏可切换速度、尺寸和背景。</p>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const tankRoot = "../../_era3_preview/craftpix_factory_boss_110055/extracted/2";
+
+    const animations = [
+      {
+        id: "tankIdle",
+        src: `${tankRoot}/Idle.png`,
+        frames: 6,
+        sourceCell: 96,
+        mode: "loop"
+      },
+      {
+        id: "tankDrive",
+        src: `${tankRoot}/Drive.png`,
+        frames: 6,
+        sourceCell: 96,
+        mode: "loop"
+      },
+      {
+        id: "tankTurn",
+        src: `${tankRoot}/Turn.png`,
+        frames: 6,
+        sourceCell: 96,
+        mode: "pingpong"
+      },
+      {
+        id: "tankSpecial",
+        src: `${tankRoot}/Special.png`,
+        frames: 6,
+        sourceCell: 96,
+        mode: "loop"
+      },
+      {
+        id: "tankMoveIn",
+        src: `${tankRoot}/MoveIn.png`,
+        frames: 4,
+        sourceCell: 96,
+        mode: "pingpong"
+      },
+      {
+        id: "tankMoveOut",
+        src: `${tankRoot}/MoveOut.png`,
+        frames: 4,
+        sourceCell: 96,
+        mode: "pingpong"
+      },
+      {
+        id: "tankHurt",
+        src: `${tankRoot}/Hurt.png`,
+        frames: 2,
+        sourceCell: 96,
+        mode: "pingpong"
+      },
+      {
+        id: "tankDeath",
+        src: `${tankRoot}/Death.png`,
+        frames: 4,
+        sourceCell: 96,
+        mode: "hold",
+        holdFrames: 3
+      },
+      {
+        id: "gasStart",
+        src: `${tankRoot}/Gas_Start.png`,
+        frames: 8,
+        sourceCell: 96,
+        mode: "loop"
+      },
+      {
+        id: "gasCycle",
+        src: `${tankRoot}/Gas_Sycle.png`,
+        frames: 8,
+        sourceCell: 96,
+        mode: "loop"
+      },
+      {
+        id: "gasEnd",
+        src: `${tankRoot}/Gas_End.png`,
+        frames: 8,
+        sourceCell: 96,
+        mode: "loop"
+      },
+      {
+        id: "v5Enhanced",
+        src: "./rigged_v5_enhanced/mech_v5_rigged_idle.png",
+        frames: 6,
+        sourceCell: 192,
+        mode: "loop"
+      },
+      {
+        id: "foozleMecha",
+        src: "../../assets/mech/blue_mecha_idle.png",
+        frames: 8,
+        sourceCell: 80,
+        mode: "loop"
+      }
+    ].map((animation) => ({
+      ...animation,
+      canvas: document.querySelector(`#${animation.id}`),
+      state: document.querySelector(`#${animation.id}State`),
+      loaded: false
+    }));
+
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let tick = 0;
+    let playing = !prefersReducedMotion;
+    let frameMs = 150;
+    let lastAdvance = performance.now();
+
+    function getFrame(animation) {
+      if (animation.mode === "pingpong") {
+        const period = Math.max(1, animation.frames * 2 - 2);
+        const phase = tick % period;
+        return phase < animation.frames ? phase : period - phase;
+      }
+
+      if (animation.mode === "hold") {
+        const period = animation.frames + (animation.holdFrames || 2);
+        return Math.min(tick % period, animation.frames - 1);
+      }
+
+      return tick % animation.frames;
+    }
+
+    function loadAnimation(animation) {
+      const image = new Image();
+      image.decoding = "async";
+      image.src = animation.src;
+      animation.image = image;
+
+      image.addEventListener("load", () => {
+        animation.loaded = true;
+        renderAnimation(animation);
+      });
+
+      image.addEventListener("error", () => {
+        animation.state.innerHTML = '<span class="error">图片加载失败，请确认从项目根目录启动本地服务器。</span>';
+      });
+    }
+
+    function renderAnimation(animation) {
+      if (!animation.loaded) return;
+
+      const size = Number(document.querySelector("#size").value);
+      const frame = getFrame(animation);
+      const context = animation.canvas.getContext("2d");
+
+      if (animation.canvas.width !== size || animation.canvas.height !== size) {
+        animation.canvas.width = size;
+        animation.canvas.height = size;
+      }
+
+      context.imageSmoothingEnabled = false;
+      context.clearRect(0, 0, size, size);
+      context.drawImage(
+        animation.image,
+        frame * animation.sourceCell,
+        0,
+        animation.sourceCell,
+        animation.sourceCell,
+        0,
+        0,
+        size,
+        size
+      );
+
+      animation.state.innerHTML =
+        `当前帧 <strong>${frame + 1}</strong> / ${animation.frames} · ` +
+        `帧时长 <strong>${frameMs}ms</strong>`;
+    }
+
+    function renderAll() {
+      animations.forEach(renderAnimation);
+    }
+
+    function advance(amount = 1) {
+      tick = Math.max(0, tick + amount);
+      renderAll();
+    }
+
+    function loop(now) {
+      if (playing && now - lastAdvance >= frameMs) {
+        const elapsedFrames = Math.max(1, Math.floor((now - lastAdvance) / frameMs));
+        tick += elapsedFrames;
+        lastAdvance += elapsedFrames * frameMs;
+        renderAll();
+      }
+      requestAnimationFrame(loop);
+    }
+
+    const playButton = document.querySelector("#play");
+    playButton.textContent = playing ? "暂停" : "播放";
+
+    playButton.addEventListener("click", () => {
+      playing = !playing;
+      playButton.textContent = playing ? "暂停" : "播放";
+      lastAdvance = performance.now();
+    });
+
+    document.querySelector("#prev").addEventListener("click", () => {
+      playing = false;
+      playButton.textContent = "播放";
+      advance(-1);
+    });
+
+    document.querySelector("#next").addEventListener("click", () => {
+      playing = false;
+      playButton.textContent = "播放";
+      advance(1);
+    });
+
+    document.querySelector("#speed").addEventListener("input", (event) => {
+      frameMs = Number(event.target.value);
+      document.querySelector("#speedValue").textContent = `${frameMs} ms`;
+      lastAdvance = performance.now();
+      renderAll();
+    });
+
+    document.querySelector("#size").addEventListener("change", (event) => {
+      document.documentElement.style.setProperty("--stage-size", `${event.target.value}px`);
+      renderAll();
+    });
+
+    document.querySelector("#background").addEventListener("change", (event) => {
+      document.body.classList.remove("checker", "light");
+      if (event.target.value !== "dark") {
+        document.body.classList.add(event.target.value);
+      }
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.target.matches("input, select, button")) return;
+
+      if (event.code === "Space") {
+        event.preventDefault();
+        playButton.click();
+      } else if (event.code === "ArrowLeft") {
+        event.preventDefault();
+        document.querySelector("#prev").click();
+      } else if (event.code === "ArrowRight") {
+        event.preventDefault();
+        document.querySelector("#next").click();
+      }
+    });
+
+    animations.forEach(loadAnimation);
+    renderAll();
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>

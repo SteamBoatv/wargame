@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Era III 工程喷射坦克 · 集成验收</title>
+  <style>
+    *{box-sizing:border-box}
+    html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#111;color:#e9fff5;font-family:system-ui,"Microsoft YaHei",sans-serif}
+    iframe{display:block;width:100%;height:100%;border:0}
+    html.mobile body{display:grid;place-items:start center;background:#263d22}
+    html.mobile iframe{width:390px;height:min(844px,100vh)}
+    #qa{position:fixed;z-index:100;top:10px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;
+      padding:8px 12px;border:1px solid #4be6b4;background:rgba(5,22,20,.88);box-shadow:0 4px 24px rgba(0,0,0,.45);
+      font-size:13px;pointer-events:none}
+    html.mobile #qa{max-width:380px;gap:5px;padding:5px 7px;font-size:11px;white-space:nowrap}
+    #qa b{color:#6effb7}
+    #qa button{pointer-events:auto;border:1px solid #6effb7;background:#143b32;color:#fff;padding:5px 9px;cursor:pointer}
+  </style>
+</head>
+<body>
+  <iframe id="game" src="../../index.html"></iframe>
+  <div id="qa"><b>自动验收场景</b><span id="state">载入中…</span><button id="rerun" type="button">重新播放</button></div>
+  <script>
+    const frame=document.querySelector('#game');
+    const state=document.querySelector('#state');
+    const params=new URLSearchParams(location.search);
+    if(params.get('mobile')==='1')document.documentElement.classList.add('mobile');
+    const fastMode=params.get('fast')==='1';
+    const interruptMode=params.get('interrupt')==='1';
+    const cameraMode=params.get('camera')||'';
+    const freezeAt=Math.max(0,Number(params.get('freeze'))||0);
+    function startScenario(){
+      frame.contentWindow.eval(`(()=>{
+        if(globalThis.__tankQaTimers)for(const t of globalThis.__tankQaTimers)clearTimeout(t);
+        globalThis.__tankQaTimers=[];
+        mode='play';paused=false;gameSpeed=1;RUN=null;
+        const per={...PVP_PER,queue:0,evolve:false};
+        newGame({per,cmdr0:'engineer',cmdr1:'warlord',events:[],node:{t:'pvp'},
+          aiEra:2,hpMul:1,dmgMul:1,aiIncomeMul:1,mapDef:genMapDef({noFork:true})});
+        G.pvp=false;G.money=9999;G.aiMoney=0;G.xp=9999;G.era=3;G.aiEra=2;
+        ['menu','mapov','pvpov','gameover','pauseov','runover'].forEach(id=>{const e=$(id);if(e)e.classList.add('hidden');});
+        buildUnitButtons();refreshHUD();setFollow(false);
+        spawnUnit(0,HERO_TANK.unit);
+        const hero=G.units[G.units.length-1];
+        const hp=unitPos(hero);cam.x=hp.x;cam.y=hp.y-125;clampCam();
+        if(${cameraMode==='top'?'true':'false'}){
+          cam.y=-WORLD_VIEW_TOP_PAD;clampCam();
+        }else if(${cameraMode==='bottom'?'true':'false'}){
+          cam.y=WORLD_H+WORLD_VIEW_BOTTOM_PAD;clampCam();
+        }
+        if(${fastMode?'true':'false'}){
+          paused=true;
+          const stepper=setInterval(()=>{
+            if(G&&!G.over){
+              for(let i=0;i<5;i++)update(0.05);
+              draw();refreshHUD();
+              if(${freezeAt}>0&&G.t>=${freezeAt})clearInterval(stepper);
+            }
+          },50);
+          globalThis.__tankQaTimers.push(stepper);
+        }
+        let foe=null,lateFoe=null,forcedDamage=false;
+        const director=setInterval(()=>{
+          if(!G||hero.dying){clearInterval(director);return}
+          if(!foe&&G.t>=5.2){
+            spawnUnit(1,'ram2');
+            foe=G.units[G.units.length-1];
+            foe.s=hero.s+70;foe.off=hero.off;foe.hp=Math.min(88,foe.max);
+          }
+          if(!forcedDamage&&G.t>=8.5){
+            forcedDamage=true;damage(hero,180,1,null);
+            for(const enemy of G.units)if(enemy.side===1&&!enemy.dying)damage(enemy,999,0,hero);
+            if(!${interruptMode?'true':'false'})clearInterval(director);
+          }
+          if(${interruptMode?'true':'false'}&&forcedDamage&&!lateFoe&&G.t>=13.2){
+            spawnUnit(1,'ram2');
+            lateFoe=G.units[G.units.length-1];
+            lateFoe.s=hero.s+38;lateFoe.off=hero.off;lateFoe.hp=Math.min(88,lateFoe.max);
+          }
+          if(lateFoe&&G.t>=17){
+            if(!lateFoe.dying)damage(lateFoe,999,0,hero);
+            clearInterval(director);
+          }
+        },100);
+        globalThis.__tankQaTimers.push(director);
+      })()`);
+    }
+    function showState(){
+      try{
+        const s=frame.contentWindow.eval(`(()=>{
+          if(!G)return null;
+          const h=G.units.find(u=>u.type===HERO_TANK.unit&&!u.dying);
+          return h?{phase:h.heroState||((h.atkT||9)<1.8?'spray':(h.moving?'drive':'idle')),
+            hp:Math.round(h.hp),max:h.max,t:G.t.toFixed(1)}:null;
+        })()`);
+        state.textContent=s?`t=${s.t}s · ${s.phase} · HP ${s.hp}/${s.max}`:'等待坦克生成';
+      }catch(e){state.textContent='场景初始化失败：'+e.message}
+    }
+    let startedDocument=null,bootTimer=null,stateTimer=null;
+    function bootScenario(){
+      clearTimeout(bootTimer);
+      try{
+        const doc=frame.contentDocument;
+        if(!doc||startedDocument===doc)return;
+        const ready=frame.contentWindow.eval(
+          `typeof newGame==='function'&&typeof spawnUnit==='function'&&
+           typeof HERO_TANK==='object'&&typeof HERO_TANK_ANIMS==='object'&&
+           typeof ASSETS==='object'&&ASSETS.heroTank&&
+           Object.keys(HERO_TANK_ANIMS).every(k=>ASSETS.heroTank[k]&&
+             ASSETS.heroTank[k].complete&&ASSETS.heroTank[k].naturalWidth>0)`
+        );
+        if(!ready){
+          state.textContent='等待游戏脚本与坦克素材加载…';
+          bootTimer=setTimeout(bootScenario,150);
+          return;
+        }
+        startScenario();
+        startedDocument=doc;
+        if(!stateTimer)stateTimer=setInterval(showState,200);
+      }catch(e){
+        state.textContent='等待游戏初始化…';
+        bootTimer=setTimeout(bootScenario,150);
+      }
+    }
+    frame.addEventListener('load',bootScenario);
+    if(frame.contentDocument?.readyState==='complete')bootScenario();
+    document.querySelector('#rerun').addEventListener('click',startScenario);
+  </script>
+</body>
+</html>
