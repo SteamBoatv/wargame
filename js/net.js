@@ -57,8 +57,9 @@ async function netOpen(code,role){
     /* ⚠️ 每次改动线材协议（UNITS 顺序 / COMMANDERS 键 / 快照字段）都必须升这个版本号。
        旧客户端收到未知指挥官键会直接 TypeError 死锁（不是优雅退化），而 GitHub Pages
        的 JS 默认缓存 10 分钟——不换房间号就会有新旧端在同一个房间里互相拖死。
-       v2：新增 warlord 指挥官与 torch2/tnt2/barrel2 三个兵种类型。 */
-    appId:'kip-wargame-pvp-v2',
+       v2：新增 warlord 指挥官与 torch2/tnt2/barrel2 三个兵种类型。
+       v3：新增 eng_tank3、第三时代与英雄阶段快照字段。 */
+    appId:'kip-wargame-pvp-v3',
     turnConfig:[
       {urls:'stun:global.stun.twilio.com:3478'},
       {urls:'stun:stun.nextcloud.com:3478'},
@@ -447,7 +448,7 @@ function netApplyCmd(c){
     const k=c.k;
     if(!cmdrOf(1).roster[G.aiEra].includes(k))return;
     const st=UNITS[k];
-    if(G.aiMoney<st.cost||G.aiQueue.length>=QUEUE_MAX)return;
+    if(G.aiMoney<st.cost||G.aiQueue.length>=QUEUE_MAX||unitLimitReached(1,k))return;
     G.aiMoney-=st.cost;
     G.aiQueue.push({type:k,t:st.build});
     teleCmd(1,'buy',k);
@@ -459,10 +460,12 @@ function netApplyCmd(c){
     G.aiMoney-=cost;G.aiIncomeLvl++;G.aiIncome+=INCOME_STEP;
     teleCmd(1,'inc',G.aiIncomeLvl);
   }else if(c.a==='e'){
-    if(G.aiEra!==1||G.aiXp<EVOLVE_XP||G.aiMoney<EVOLVE_COST)return;
-    G.aiMoney-=EVOLVE_COST;G.aiEra=2;G.flash=1;
+    if(G.aiEra>=ERA_MAX)return;
+    const xr=evolveXpReq(G.aiEra), cr=evolveCostReq(G.aiEra);
+    if(G.aiXp<xr||G.aiMoney<cr)return;
+    G.aiMoney-=cr;G.aiEra++;G.flash=1;
     teleCmd(1,'evolve');
-    toast('⚠️ 对方进化到了王国时代！');
+    toast(G.aiEra===3?'⚠️ 对方进入英雄时代！':'⚠️ 对方进化到了王国时代！');
     sEvolve();
     if(NET)NET.sendFx({k:'ev'});
   }else if(c.a==='p'){
@@ -528,7 +531,8 @@ function netHostSnap(dt){
       us:G.units.map(u=>[u.uid,TYPE_KEYS.indexOf(u.type),u.side,Math.round(u.s),Math.round(u.off),
         Math.round(u.hp),u.max,(u.moving?1:0)|((u.vet||0)>=1?2:0)|(u.dying?4:0)|(u.atkT<0.4?8:0)|
         ((u.vet||0)>=2?16:0)|(u.back?32:0)|(u.guard?64:0)|(((u.wlv||0)&1)?128:0)|
-        (((u.wlv||0)&2)?256:0)|(u.recT?512:0)]),
+        (((u.wlv||0)&2)?256:0)|(u.recT?512:0),
+        Math.max(0,HERO_TANK.states.indexOf(u.heroState||'')),Math.round((u.heroStateT||0)*10)]),
       pr:G.projs.map(p=>[p.pid,Math.max(0,PROJ_KINDS.indexOf(p.kind)),
         Math.round(p.x),Math.round(p.y),Math.round(p.ang*100),p.side?1:0]),
       sk:G.strikes.map(k=>[k.side||0,Math.round(k.x),Math.round(k.y),Math.round(k.r),
@@ -589,11 +593,13 @@ function netApplySnap(sn){
     if(!tk)continue;
     seen[uid]=1;
     const side=MSIDE(a[2]), s=MS(a[3]), off=MOFF(a[4]), hp=a[5], max=a[6], fl=a[7];
+    const heroState=HERO_TANK.states[a[8]||0]||'', heroStateT=(a[9]||0)/10;
     let u=G._umap[uid];
     if(!u){
       u={uid,side,type:tk,s,off,hp,max,cd:9,walk:rand(0,6),lunge:0,
          dying:(fl&4)?0.001:0,moving:!!(fl&1),kills:0,vet:vetOfFlag(fl),back:!!(fl&32),
-         guard:!!(fl&64),wlv:(fl>>7)&3,recT:(fl&512)?1:0,atkT:9,animT:rand(0,9),_ts:s};
+         guard:!!(fl&64),wlv:(fl>>7)&3,recT:(fl&512)?1:0,atkT:9,animT:rand(0,9),
+         heroState,heroStateT,heroHurtT:0,_ts:s};
       G._umap[uid]=u;
       G.units.push(u);
     }else{
@@ -601,6 +607,8 @@ function netApplySnap(sn){
       u.type=tk;
       u.moving=!!(fl&1);u.vet=vetOfFlag(fl);u.back=!!(fl&32);u.guard=!!(fl&64);
       u.wlv=(fl>>7)&3;u.recT=(fl&512)?1:0;
+      if(u.heroState!==heroState){u.heroState=heroState;u.heroStateT=heroStateT;}
+      else if(Math.abs((u.heroStateT||0)-heroStateT)>0.35)u.heroStateT=heroStateT;
       if((fl&8)&&u.atkT>0.5)u.atkT=0;
       if((fl&4)&&!u.dying)u.dying=0.001;
     }
@@ -649,6 +657,7 @@ function netGuestTick(dt){
     u.atkT+=dt;
     if(u._ts!==undefined)u.s+=(u._ts-u.s)*Math.min(1,dt*10);
     if(u.moving){u.animT+=dt;u.walk+=dt*8;}
+    if(UNITS[u.type]&&UNITS[u.type].heroTank)u.heroStateT=(u.heroStateT||0)+dt;
   }
   G.units=G.units.filter(u=>u.dying<=0.45);
   for(const p of G.projs){

@@ -46,10 +46,24 @@ function spawnUnit(side,type){
   const off=LANE_SLOTS[G.spawnCnt[side]++%LANE_SLOTS.length]+rand(-5,5);
   const hpMul=side?(G.stage?G.stage.hpMul:1):(RUN?RUN.mods.hp:1)*famMod(type,'hp');
   const hp=Math.round(st.hp*hpMul);
-  G.units.push({uid:(G.uidSeq=(G.uidSeq||0)+1),side,type,s:side?L-70:70,off,hp,max:hp,
+  const u={uid:(G.uidSeq=(G.uidSeq||0)+1),side,type,s:side?L-70:70,off,hp,max:hp,
     cd:rand(0.1,0.4),walk:rand(0,6),lunge:0,dying:0,moving:false,kills:0,vet:0,
-    atkT:9,animT:rand(0,9)});
+    atkT:9,animT:rand(0,9)};
+  if(st.heroTank){
+    u.heroState='airdrop';u.heroStateT=0;u.heroCombatT=0;u.heroRepairCd=0;
+    u.heroSawCombat=false;u.heroRepairAbort=false;u.cd=HERO_TANK.dropDur+HERO_TANK.startupDur;
+  }
+  G.units.push(u);
   sSpawn();
+}
+function unitLimitReached(side,type){
+  const st=UNITS[type];
+  if(!st||!st.maxAlive)return false;
+  let n=0;
+  for(const u of G.units)if(u.side===side&&!u.dying&&u.type===type)n++;
+  const q=side?G.aiQueue:G.queue;
+  for(const it of q)if(it.type===type)n++;
+  return n>=st.maxAlive;
 }
 function addFloat(x,y,txt,c,sz){G.floats.push({x,y,txt,a:1.4,c:c||'#ffd76a',sz:sz||22});}
 function toast(txt){
@@ -69,9 +83,19 @@ function bumpStreak(){
 
 function damage(e,dmg,bySide,attacker){
   if(e.dying)return;
+  /* 空投与落地启动是生产完成后的纯演出阶段：尚未进入战场碰撞/伤害集合。 */
+  if(e.heroState==='airdrop'||e.heroState==='startup')return;
   /* 受击打断回收引导（不退款、恢复产出）：否则"看到红圈点回收"3 秒内要打出 600 伤害
      才拦得住，火力覆盖单轮期望仅 203——回收会变成敌方火力下的无风险撤资 */
   if(e.recT&&UNITS[e.type].cls==='bldg')e.recT=0;
+  if(UNITS[e.type].heroTank){
+    e.heroSawCombat=true;e.heroCombatT=HERO_TANK.combatQuiet;e.heroHurtT=0.18;
+    if(e.heroState&&e.heroState.startsWith('repair')&&!e.heroRepairAbort){
+      e.heroRepairAbort=true;
+      e.heroRepairAbortAt=e.heroState==='repair_loop'
+        ?Math.floor((e.heroStateT||0)/HERO_TANK.repairLoop)+1:0;
+    }
+  }
   e.hp-=dmg;
   if(e.hp<=0){
     e.dying=1e-4;
@@ -113,7 +137,7 @@ function damage(e,dmg,bySide,attacker){
 function promoteVet(u){
   const cur=u.vet||0;
   if(cur>=VET_MAX)return;
-  if(UNITS[u.type].cls==='bldg')return;   /* 建筑不升军衔：drawBuilding 走的另一条分支，加了也看不见 */
+  if(UNITS[u.type].cls==='bldg'||UNITS[u.type].noVet)return; /* 建筑/英雄不走常规军衔管线 */
   const nx=VET_RANKS[cur+1];
   if(u.kills<nx.kills)return;
   u.vet=cur+1;
@@ -159,7 +183,8 @@ function plunderOf(side){
   const half=L*0.5, ramp=L*PLUNDER.ramp;
   let sum=0;
   for(const u of G.units){
-    if(u.side!==side||u.dying||u.guard||UNITS[u.type].cls==='bldg')continue;
+    if(u.side!==side||u.dying||u.guard||UNITS[u.type].cls==='bldg'||
+       u.heroState==='airdrop'||u.heroState==='startup')continue;
     const d=side?half-u.s:u.s-half;   /* side1 的"敌方半场"在 s 小的一侧，写死会在镜像后反向 */
     if(d>0)sum+=Math.min(1,d/ramp);
   }
@@ -171,7 +196,7 @@ function updateFlags(dt){
   for(const f of G.flags){
     let p=0,a=0;
     for(const u of G.units){
-      if(u.dying||UNITS[u.type].cls==='bldg')continue;
+      if(u.dying||UNITS[u.type].cls==='bldg'||u.heroState==='airdrop'||u.heroState==='startup')continue;
       if(Math.abs(u.s-f.s)<FLAG_RANGE){if(u.side)a++;else p++;}
     }
     if(p>0&&a===0)f.prog=Math.min(1,f.prog+dt/FLAG_TIME);
@@ -220,7 +245,23 @@ function endGame(r){
 
 function fire(u,st,tgt,onBase){
   const enemySide=1-u.side;
-  if(st.proj){
+  if(st.heroTank){
+    u.heroSawCombat=true;u.heroCombatT=HERO_TANK.combatQuiet;
+    if(onBase)hitBase(enemySide,st.dmg);
+    else{
+      const dir=u.side?-1:1;
+      /* 短射程喷射锥：只扫车头前方和相邻车道，独立 hero 分类不吃任何硬克制倍率。 */
+      for(const e of G.units){
+        if(e.side===u.side||e.dying||e.heroState==='airdrop'||e.heroState==='startup')continue;
+        const ahead=(e.s-u.s)*dir;
+        if(ahead< -8||ahead>st.range+12||Math.abs((e._lat||0)-(u._lat||0))>58)continue;
+        const r=rollDmg(st,e,u,u.side);
+        if(UNITS[e.type].cls!=='bldg')e.s=clamp(e.s+dir*3,10,L-10);
+        applyDamage(e,r,u.side,u);
+      }
+    }
+    sHit();
+  }else if(st.proj){
     const from=unitPos(u);
     /* 高大建筑（激光塔）的炮口远高于步兵，用 mz 覆盖默认枪口高度 */
     const mzx=st.mz?st.mz[0]*(u.side?-1:1):0, mzy=st.mz?st.mz[1]:-26;
@@ -286,6 +327,86 @@ function guardStep(u,st,tgt,dt,wSpd){
     if(Math.abs(od)>0.5)u.off+=Math.sign(od)*Math.min(Math.abs(od),sp*0.6*dt);
   }
 }
+function heroSetState(u,state){
+  u.heroState=state;u.heroStateT=0;u.moving=false;u.lunge=0;
+}
+function heroThreatNear(u,st,us){
+  for(const e of us){
+    if(e.side===u.side||e.dying||e.heroState==='airdrop'||e.heroState==='startup')continue;
+    if(Math.abs((e._lat||0)-(u._lat||0))>62)continue;
+    if(Math.abs(e.s-u.s)<=st.range+24)return true;
+  }
+  return false;
+}
+function startHeroRepair(u){
+  const missing=u.max-u.hp;
+  u.heroRepairLeft=Math.min(missing,u.max*HERO_TANK.repairCap);
+  u.heroRepairPulses=Math.ceil(u.heroRepairLeft/(u.max*HERO_TANK.repairPulse));
+  u.heroRepairDone=0;u.heroRepairAbort=false;u.heroRepairAbortAt=0;
+  heroSetState(u,'repair_open');
+}
+/* 返回 true 表示部署/维修状态独占本帧，常规索敌、开火和移动全部跳过。 */
+function updateHeroTankState(u,st,us,dt){
+  u.heroStateT=(u.heroStateT||0)+dt;
+  u.heroCombatT=Math.max(0,(u.heroCombatT||0)-dt);
+  u.heroRepairCd=Math.max(0,(u.heroRepairCd||0)-dt);
+  u.heroHurtT=Math.max(0,(u.heroHurtT||0)-dt);
+  if(u.heroState==='airdrop'){
+    if(u.heroStateT>=HERO_TANK.dropDur){
+      heroSetState(u,'startup');
+      const p=unitPos(u);
+      G.shake=Math.max(G.shake,0.42);
+      G.booms.push({x:p.x,y:p.y-4,t:0});
+      sTankLand();
+    }
+    return true;
+  }
+  if(u.heroState==='startup'){
+    if(u.heroStateT>=HERO_TANK.startupDur){heroSetState(u,'');u.cd=0.25;}
+    return true;
+  }
+  if(!u.heroState||!u.heroState.startsWith('repair'))return false;
+  u.moving=false;
+  const threat=heroThreatNear(u,st,us);
+  if(threat&&!u.heroRepairAbort){
+    u.heroRepairAbort=true;u.heroSawCombat=true;u.heroCombatT=HERO_TANK.combatQuiet;
+    u.heroRepairAbortAt=u.heroState==='repair_loop'
+      ?Math.floor(u.heroStateT/HERO_TANK.repairLoop)+1:0;
+  }
+  if(u.heroState==='repair_open'){
+    if(u.heroRepairAbort)heroSetState(u,'repair_close');
+    else if(u.heroStateT>=HERO_TANK.repairOpen)heroSetState(u,'repair_loop');
+    return true;
+  }
+  if(u.heroState==='repair_loop'){
+    const completed=Math.floor(u.heroStateT/HERO_TANK.repairLoop);
+    while(u.heroRepairDone<completed&&u.heroRepairDone<u.heroRepairPulses){
+      const amt=Math.min(u.max*HERO_TANK.repairPulse,u.heroRepairLeft,u.max-u.hp);
+      if(amt>0){
+        u.hp=Math.min(u.max,u.hp+amt);u.heroRepairLeft-=amt;
+        const p=unitPos(u);
+        addFloat(p.x+rand(-14,14),p.y-68,'+'+Math.round(amt),'#5dff88',14);
+        sRepairPulse();
+      }
+      u.heroRepairDone++;
+    }
+    const aborted=u.heroRepairAbort&&completed>=u.heroRepairAbortAt;
+    if(aborted||u.heroRepairDone>=u.heroRepairPulses||u.heroRepairLeft<=0||u.hp>=u.max)
+      heroSetState(u,'repair_close');
+    return true;
+  }
+  if(u.heroState==='repair_close'){
+    if(u.heroStateT>=HERO_TANK.repairClose){
+      const interrupted=u.heroRepairAbort;
+      heroSetState(u,'');
+      u.heroRepairCd=HERO_TANK.repairCd;
+      u.heroRepairAbort=false;
+      if(!interrupted)u.heroSawCombat=false;
+    }
+    return true;
+  }
+  return false;
+}
 function updateUnits(dt){
   const us=G.units;
   /* 每帧缓存路径横向位置（含岔路分离），供索敌/阻挡/溅射使用 */
@@ -309,11 +430,13 @@ function updateUnits(dt){
     u.cd-=dt;
     u.atkT+=dt;
     u.lunge=Math.max(0,u.lunge-dt*5);
+    if(st.heroTank&&updateHeroTankState(u,st,us,dt))continue;
     /* 修士：不攻击，治疗射程内最残血的友军；无人可治则跟队推进 */
     if(st.cls==='heal'){
       let ally=null,worst=0.999;
       for(const a of us){
-        if(a.side!==u.side||a.dying||a===u||UNITS[a.type].cls==='bldg')continue;
+        if(a.side!==u.side||a.dying||a===u||UNITS[a.type].cls==='bldg'||
+           a.heroState==='airdrop'||a.heroState==='startup')continue;
         if(Math.abs(a._lat-u._lat)>60)continue;
         if(Math.abs(a.s-u.s)<=st.range){
           const r=a.hp/a.max;
@@ -336,6 +459,7 @@ function updateUnits(dt){
         let blocked=false;
         for(const a of us){
           if(a===u||a.side!==u.side||a.dying||UNITS[a.type].cls==='bldg')continue;
+          if(a.heroState==='airdrop'||a.heroState==='startup')continue;
           if(Math.abs(a._lat-u._lat)>=18)continue;
           const gp=(a.s-u.s)*dir;
           if(gp>0&&gp<20){blocked=true;break;}
@@ -355,7 +479,8 @@ function updateUnits(dt){
     let tgt=null, tscore=1e9, tds=1e9;
     for(const e of us){
       if(e.side===u.side||e.dying)continue;
-      if(rngEff<=50&&Math.abs(e._lat-u._lat)>46)continue; /* 近战不能隔着岔路打 */
+      if(e.heroState==='airdrop'||e.heroState==='startup')continue;
+      if((rngEff<=50||st.heroTank)&&Math.abs(e._lat-u._lat)>46)continue; /* 近战不能隔着岔路打 */
       const ds=Math.abs(e.s-u.s);
       if(sight&&ds>sight)continue;                       /* 太远的锁不上 */
       const score=ds+Math.abs(e._lat-u._lat)*0.3;
@@ -365,6 +490,18 @@ function updateUnits(dt){
     let onBase=false, td=tds;
     /* 守备队不打城堡：它被拴在空降点附近，本来也够不着，留着只会让它朝城堡空转 */
     if(!u.guard&&(!tgt||bd<tds)){td=bd;tgt=null;onBase=true;}
+    if(st.heroTank){
+      if(td<=rngEff){
+        u.heroSawCombat=true;u.heroCombatT=HERO_TANK.combatQuiet;
+      }else if(u.heroSawCombat&&u.heroCombatT<=0){
+        const missing=(u.max-u.hp)/u.max;
+        if(missing>=HERO_TANK.repairThreshold&&u.heroRepairCd<=0){
+          startHeroRepair(u);
+          continue;
+        }
+        u.heroSawCombat=false;
+      }
+    }
     /* 滚桶兵：接敌自爆，范围伤害 */
     if(st.cls==='bomb'&&td<=st.range){
       u.dying=1e-4;
@@ -395,6 +532,7 @@ function updateUnits(dt){
       let blocked=false;
       for(const a of us){
         if(a===u||a.side!==u.side||a.dying||UNITS[a.type].cls==='bldg')continue;
+        if(a.heroState==='airdrop'||a.heroState==='startup')continue;
         if(Math.abs(a._lat-u._lat)>=18)continue;
         const gp=(a.s-u.s)*dir;
         if(gp>0&&gp<20){blocked=true;break;}
@@ -460,9 +598,12 @@ function aiThink(dt){
   if(G.aiDecide>0)return;
   const per=G.per;
   G.aiDecide=rand(per.decide[0],per.decide[1]);
-  if(per.evolve&&G.aiEra===1&&G.aiXp>=EVOLVE_XP*(per.evolveMul||1.15)&&G.aiMoney>=EVOLVE_COST){
-    G.aiMoney-=EVOLVE_COST; G.aiEra=2; G.aiPlan=null; G.flash=1;
-    toast('⚠️ 敌方进化到了王国时代！'); sEvolve();
+  if(per.evolve&&G.aiEra<ERA_MAX){
+    const xr=evolveXpReq(G.aiEra)*(per.evolveMul||1.15), cr=evolveCostReq(G.aiEra);
+    if(G.aiXp>=xr&&G.aiMoney>=cr){
+      G.aiMoney-=cr; G.aiEra++; G.aiPlan=null; G.flash=1;
+      toast(G.aiEra===3?'⚠️ 敌方进入英雄时代！':'⚠️ 敌方进化到了王国时代！'); sEvolve();
+    }
   }
   if(G.aiIncomeLvl<INCOME_MAX_LVL&&Math.random()<per.eco){
     const c=incomeCost(G.aiIncomeLvl);
@@ -494,7 +635,7 @@ function aiPick(){
   }else keys=cmdrOf(1).roster[G.aiEra];
   const reach=G.aiMoney+G.aiIncome*6;
   const w={};
-  for(const k of keys)if(UNITS[k].cost<=reach)
+  for(const k of keys)if(UNITS[k].cost<=reach&&!unitLimitReached(1,k))
     w[k]=(per.weights&&per.weights[k])||UNITS[k].w*(counts?counts[k]:1);
   if(!Object.keys(w).length)return keys[0];
   if(per.smart){
@@ -569,8 +710,8 @@ function update(dt){
   updatePiles(dt);
   updateFloats(dt);
   /* 被动经验：保证每局都能摸到时代进化 */
-  if(G.era===1)G.xp+=2*dt;
-  if(G.per.evolve&&G.aiEra===1)G.aiXp+=2*dt;
+  if(G.era<ERA_MAX)G.xp+=2*dt;
+  if(G.per.evolve&&G.aiEra<ERA_MAX)G.aiXp+=2*dt;
   if(G.banner){G.banner.a-=dt;if(G.banner.a<=0)G.banner=null;}
   G.flash=Math.max(0,G.flash-dt*1.2);
   G.shake=Math.max(0,G.shake-dt*1.6);
@@ -708,7 +849,7 @@ function countBldg(side,unitType){
 function frontInstant(side){
   let m=side?L:0;
   for(const u of G.units){
-    if(u.side!==side||u.dying||u.guard)continue;
+    if(u.side!==side||u.dying||u.guard||u.heroState==='airdrop'||u.heroState==='startup')continue;
     m=side?Math.min(m,u.s):Math.max(m,u.s);
   }
   return m;
@@ -793,7 +934,7 @@ function airdropCore(side,s,slk){
   if(side)G.aiMoney-=P.cost; else G.money-=P.cost;
   G.pcds.airdrop[side]=P.cd*(side?1:(RUN?RUN.mods.turCd:1));
   const era=side?G.aiEra:G.era;
-  const comp=era===2?AIRDROP.comp2:AIRDROP.comp1;
+  const comp=era>=2?AIRDROP.comp2:AIRDROP.comp1;
   const toFoe=side?-1:1;   /* s 空间里朝向敌方的方向 */
   let nm=0,nr=0;
   comp.forEach(k=>{
@@ -829,7 +970,7 @@ function hordeCore(side,s,slk){
   if(side)G.aiMoney-=P.cost; else G.money-=P.cost;
   G.pcds.horde[side]=P.cd*(side?1:(RUN?RUN.mods.turCd:1));
   const era=side?G.aiEra:G.era;
-  const comp=era===2?HORDE.comp2:HORDE.comp1;
+  const comp=era>=2?HORDE.comp2:HORDE.comp1;
   comp.forEach((k,i)=>{
     const st=UNITS[k];
     const hpMul=(side?(G.stage?G.stage.hpMul:1):(RUN?RUN.mods.hp:1)*famMod(k,'hp'));

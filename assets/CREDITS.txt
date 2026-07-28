@@ -7,3 +7,8 @@ Art & audio credits (all free licenses):
 - "Medieval: Battle" music by RandomMind - CC0. https://opengameart.org/content/medieval-battle
 - RPG Sound Pack by artisticdude - CC0. https://opengameart.org/content/rpg-sound-pack
 - Battle Sound Effects by artisticdude - CC0. https://opengameart.org/content/battle-sound-effects
+- Free Factory Boss Enemies Asset Pack for Cyberpunk by CraftPix.
+  https://craftpix.net/freebies/free-factory-boss-enemies-asset-pack-for-cyberpunk/
+  Used for the Era III Engineer spray tank. Runtime includes only the selected PNG animations.
+  CraftPix free license permits use and modification in commercial games; raw assets may not be
+  resold or redistributed as standalone files, and these images must not be used in AI workflows.

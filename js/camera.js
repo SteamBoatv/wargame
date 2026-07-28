@@ -2,35 +2,64 @@
 /* ---------------- 画布与镜头 ---------------- */
 const cv=$('cv'), ctx=cv.getContext('2d');
 let dpr=1, cssW=0, cssH=0, safeR=0;
+let viewTop=0, viewBottom=0, viewH=0, viewCY=0;
 const cam={x:BASE0.x,y:BASE0.y-120,z:0.8,min:0.2,max:1.8};
+/* 镜头只把 HUD 之间的区域视作可用战场。Canvas 仍铺满全屏，
+   但城堡、单位和镜头边界不会再被顶部状态栏或底部生产栏“吃掉”。 */
+function refreshCameraSafeArea(){
+  const topbar=$('topbar'), unitbar=$('unitbar');
+  const tr=topbar&&getComputedStyle(topbar).display!=='none'?topbar.getBoundingClientRect():null;
+  const ur=unitbar&&getComputedStyle(unitbar).display!=='none'?unitbar.getBoundingClientRect():null;
+  let top=tr&&tr.height>0?Math.ceil(tr.bottom)+8:0;
+  let bottom=ur&&ur.height>0?Math.floor(ur.top)-8:cssH;
+  top=clamp(top,0,cssH);
+  bottom=clamp(bottom,0,cssH);
+  /* 极矮窗口仍需保留一块可操作区域，避免 HUD 意外把镜头压成零高度。 */
+  if(bottom-top<Math.min(180,cssH)){
+    top=0;
+    bottom=cssH;
+  }
+  viewTop=top;
+  viewBottom=bottom;
+  viewH=Math.max(1,bottom-top);
+  viewCY=(top+bottom)/2;
+  cam.min=Math.max(0.15,Math.min(cssW/WORLD_W,
+    viewH/(WORLD_H+WORLD_VIEW_TOP_PAD+WORLD_VIEW_BOTTOM_PAD)));
+  cam.max=Math.max(1.8,cssW/WORLD_W);
+  cam.z=clamp(cam.z,cam.min,cam.max);
+  clampCam();
+}
 function resize(){
   dpr=window.devicePixelRatio||1;
   cssW=innerWidth; cssH=innerHeight;
   safeR=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sar'))||0;
   cv.width=Math.round(cssW*dpr); cv.height=Math.round(cssH*dpr);
   cv.style.width=cssW+'px'; cv.style.height=cssH+'px';
-  cam.min=Math.max(0.15,Math.min(cssW/WORLD_W,cssH/WORLD_H));
-  cam.max=Math.max(1.8,cssW/WORLD_W);
-  cam.z=clamp(cam.z,cam.min,cam.max);
-  clampCam();
+  refreshCameraSafeArea();
 }
 function clampCam(){
-  const vw=cssW/cam.z, vh=cssH/cam.z;
+  const vw=cssW/cam.z, vh=(viewH||cssH)/cam.z;
+  const top=-WORLD_VIEW_TOP_PAD, bottom=WORLD_H+WORLD_VIEW_BOTTOM_PAD;
   cam.x = vw>=WORLD_W? WORLD_W/2 : clamp(cam.x,vw/2,WORLD_W-vw/2);
-  cam.y = vh>=WORLD_H? WORLD_H/2 : clamp(cam.y,vh/2,WORLD_H-vh/2);
+  cam.y = vh>=bottom-top? (top+bottom)/2 : clamp(cam.y,top+vh/2,bottom-vh/2);
 }
 function screenToWorld(px,py){
-  return {x:(px-cssW/2)/cam.z+cam.x, y:(py-cssH/2)/cam.z+cam.y};
+  return {x:(px-cssW/2)/cam.z+cam.x, y:(py-viewCY)/cam.z+cam.y};
 }
 function zoomAt(px,py,nz){
   nz=clamp(nz,cam.min,cam.max);
-  const wx=(px-cssW/2)/cam.z+cam.x, wy=(py-cssH/2)/cam.z+cam.y;
+  const wx=(px-cssW/2)/cam.z+cam.x, wy=(py-viewCY)/cam.z+cam.y;
   cam.z=nz;
   cam.x=wx-(px-cssW/2)/cam.z;
-  cam.y=wy-(py-cssH/2)/cam.z;
+  cam.y=wy-(py-viewCY)/cam.z;
   clampCam();
 }
 addEventListener('resize',resize);
+if('ResizeObserver' in window){
+  const hudObserver=new ResizeObserver(()=>refreshCameraSafeArea());
+  hudObserver.observe($('topbar'));
+  hudObserver.observe($('unitbar'));
+}
 
 /* ---------------- 输入：拖动 / 双指缩放 / 小地图 ---------------- */
 const pointers=new Map();

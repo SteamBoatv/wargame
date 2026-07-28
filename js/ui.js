@@ -1,6 +1,11 @@
 'use strict';
 /* ---------------- HUD ---------------- */
 let qSig='__init', lastIncomeLvlShown=-1, lastMoneyTxt='';
+function evolveHudText(era,xp,money){
+  if(era>=ERA_MAX)return '🦾';
+  const pct=Math.floor(evolveProgress(era,xp)*100), cost=evolveCostReq(era);
+  return pct>=100?(money>=cost?'⬆️进化!':'⬆️💰'+cost):'⬆️'+pct+'%';
+}
 function renderQueue(){
   const q=G.queue;
   let prog=0;
@@ -32,10 +37,10 @@ function refreshHUD(){
     /* 观战：上帝视角——左蓝右红，双方经济与进化全开，所有操作按钮下线 */
     $('specBadge').classList.toggle('hidden',!(mode==='play'&&!G.over));
     $('foeLabel').textContent='🔴';
-    $('foeEvo').textContent=G.aiEra===2?'👑':('⬆️'+Math.min(100,Math.floor((G.aiXp||0)/EVOLVE_XP*100))+'%');
+    $('foeEvo').textContent=evolveHudText(G.aiEra,G.aiXp||0,G.aiMoney||0);
     $('foeMoney').textContent='💰'+Math.floor(G.aiMoney||0);
     const be0=$('btnEvolve');
-    be0.textContent=G.era===2?'👑':('⬆️'+Math.min(100,Math.floor(G.xp/EVOLVE_XP*100))+'%');
+    be0.textContent=evolveHudText(G.era,G.xp,G.money);
     be0.classList.remove('ready');
     $('emoteWrap').style.display=(mode==='play'&&!G.over)?'flex':'none';
     $('btnEmote').style.display='';
@@ -47,14 +52,14 @@ function refreshHUD(){
   const lock=mode!=='play'||!!G.over||paused;
   for(const k of cmdrOf(0).roster[G.era]){
     const b=$('btn-'+k);
-    if(b)b.disabled=lock||G.money<UNITS[k].cost||G.queue.length>=QUEUE_MAX;
+    if(b)b.disabled=lock||G.money<UNITS[k].cost||G.queue.length>=QUEUE_MAX||unitLimitReached(0,k);
   }
   const be=$('btnEvolve');
-  if(G.era===2){be.textContent='👑'; be.classList.remove('ready');}
+  if(G.era>=ERA_MAX){be.textContent='🦾'; be.classList.remove('ready');}
   else{
-    const pct=Math.min(100,Math.floor(G.xp/EVOLVE_XP*100));
-    be.textContent=pct>=100?(G.money>=EVOLVE_COST?'⬆️进化!':'⬆️💰'+EVOLVE_COST):'⬆️'+pct+'%';
-    be.classList.toggle('ready',!lock&&G.xp>=EVOLVE_XP&&G.money>=EVOLVE_COST);
+    const xr=evolveXpReq(G.era), cr=evolveCostReq(G.era);
+    be.textContent=evolveHudText(G.era,G.xp,G.money);
+    be.classList.toggle('ready',!lock&&G.xp>=xr&&G.money>=cr);
   }
   const ib=$('btn-inc');
   if(ib){
@@ -89,7 +94,7 @@ function refreshHUD(){
 function buy(k){
   if(!G||mode!=='play'||paused||G.over||G.spectator)return;
   const c=UNITS[k].cost;
-  if(G.money<c||G.queue.length>=QUEUE_MAX)return;
+  if(G.money<c||G.queue.length>=QUEUE_MAX||unitLimitReached(0,k))return;
   if(G.pvp&&NET&&!NET.isHost){netSendBuy(k);sClick();return;}
   G.money-=c;
   G.queue.push({type:k,t:UNITS[k].build/(RUN?RUN.mods.build:1)});
@@ -119,12 +124,14 @@ function buildUnitButtons(){
     let t=st.name+'：生命'+st.hp+(st.heal?' 治疗'+st.heal:' 攻击'+st.dmg)+(st.proj?' 远程':(st.heal?'':' 近战'));
     if(COUNTER[st.cls])t+=' 克:'+Object.keys(COUNTER[st.cls]).map(c=>CLS_NAME[c]).join('/');
     if(st.cls==='tank')t+=' 受箭伤减半';
+    if(st.heroTank)t+=' · 短程喷射范围伤害 · 战后自修 · 同时最多1辆';
     b.title=t;
     const mIdle=st.mech?(ASSETS.mech&&ASSETS.mech.blue[st.mech+'_idle']):null;
-    const set=st.ts?ASSETS.ts[G&&G.era===2?'black':'blue']:null;
+    const hIdle=st.heroTank&&ASSETS.heroTank?ASSETS.heroTank.idle:null;
+    const set=st.ts?ASSETS.ts[G&&G.era>=2?'black':'blue']:null;
     /* 哥布林是 192px 多行图集，不能套用单行逻辑：单独取 idle 行的第 0 帧 */
     const gSheet=st.gob?((ASSETS.gob&&ASSETS.gob[st.era===2?'purple':'red'])||{})[st.gob]:null;
-    const idle=mIdle||(set?set[TS_UNITS[st.ts].idle]:null);
+    const idle=hIdle||mIdle||(set?set[TS_UNITS[st.ts].idle]:null);
     if(gSheet){
       b.innerHTML='<canvas class="be bi" width="40" height="40"></canvas><span class="bn">'+st.name+'</span><span class="bc">💰'+st.cost+'</span>';
       const cc=b.querySelector('canvas').getContext('2d');
@@ -136,7 +143,9 @@ function buildUnitButtons(){
       const cc=b.querySelector('canvas').getContext('2d');
       cc.imageSmoothingEnabled=false;
       const cell=idle.height;
-      if(mIdle){
+      if(hIdle){
+        cc.drawImage(hIdle,10,14,76,76,0,0,40,40);
+      }else if(mIdle){
         /* 图集格底部才是单位本体，直接整格缩放会画出一大片空白 */
         const mm=MECH_META[st.mech], ch=mm?mm.ch:cell;
         const sc=Math.min(40/cell,40/ch);
@@ -168,18 +177,21 @@ function buildUnitButtons(){
     bar.appendChild(tb);
   }
   lastIncomeLvlShown=-1;
+  /* 兵种数量会随指挥官和时代变化，按钮栏高度确定后同步重算镜头安全视区。 */
+  if(typeof refreshCameraSafeArea==='function')refreshCameraSafeArea();
 }
 function tryEvolve(){
-  if(!G||mode!=='play'||paused||G.over||G.spectator||G.era===2)return;
-  if(G.xp<EVOLVE_XP){toast('👑 经验不足，还差 '+Math.ceil(EVOLVE_XP-G.xp)+' 点（击杀敌军获取）');return;}
-  if(G.money<EVOLVE_COST){toast('👑 进化还需 '+Math.ceil(EVOLVE_COST-G.money)+' 金币');return;}
+  if(!G||mode!=='play'||paused||G.over||G.spectator||G.era>=ERA_MAX)return;
+  const xr=evolveXpReq(G.era), cr=evolveCostReq(G.era), next=G.era+1;
+  if(G.xp<xr){toast('👑 经验不足，还差 '+Math.ceil(xr-G.xp)+' 点（击杀敌军获取）');return;}
+  if(G.money<cr){toast('👑 进化还需 '+Math.ceil(cr-G.money)+' 金币');return;}
   if(G.pvp&&NET&&!NET.isHost){netSendEvolve();toast('👑 进化指令已发送');sClick();return;}
   if(G.pvp&&NET&&NET.isHost)NET.sendFx({k:'evh'});
-  G.money-=EVOLVE_COST; G.era=2; G.flash=1;
+  G.money-=cr; G.era=next; G.flash=1;
   teleCmd(0,'evolve');
   buildUnitButtons();
-  showBanner('👑 时代进化!');
-  toast('👑 王国时代：黑铁精锐军团已就位');
+  showBanner(next===3?'🦾 英雄时代!':'👑 时代进化!');
+  toast(next===3?'🦾 英雄时代：限量单位已解锁':'👑 王国时代：黑铁精锐军团已就位');
   sEvolve();
 }
 $('btnEvolve').addEventListener('pointerdown',e=>{e.preventDefault();tryEvolve();});

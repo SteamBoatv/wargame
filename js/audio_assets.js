@@ -32,6 +32,8 @@ function sHit(){
 }
 const sDie=()=>beep(230,0.22,'sawtooth',0.08,-150);
 const sBoom=()=>beep(90,0.3,'sawtooth',0.12,-40);
+const sTankLand=()=>{beep(72,0.34,'sawtooth',0.13,-18);setTimeout(()=>beep(118,0.16,'square',0.06,-38),70);};
+const sRepairPulse=()=>beep(620,0.10,'triangle',0.055,180);
 const sFlag=()=>beep(720,0.15,'triangle',0.1,160);
 const sEvolve=()=>[392,523,659,784].forEach((f,i)=>setTimeout(()=>beep(f,0.16,'triangle',0.12),i*110));
 const sWin=()=>[523,659,784,1047].forEach((f,i)=>setTimeout(()=>beep(f,0.18,'triangle',0.12),i*140));
@@ -50,6 +52,13 @@ const TS_UNITS={
 };
 ASSETS.ts={blue:{},black:{},red:{},purple:{},misc:{decos:[]}};
 ASSETS.gob={red:{},purple:{}};
+ASSETS.heroTank={};
+const HERO_TANK_ANIMS={
+  idle:{file:'idle',frames:6},drive:{file:'drive',frames:6},turn:{file:'turn',frames:6},
+  special:{file:'special',frames:6},moveIn:{file:'move_in',frames:4},moveOut:{file:'move_out',frames:4},
+  hurt:{file:'hurt',frames:2},death:{file:'death',frames:4},
+  gasStart:{file:'gas_start',frames:8},gasCycle:{file:'gas_cycle',frames:8},gasEnd:{file:'gas_end',frames:8},
+};
 /* 哥布林多行动画表：[行, 帧数] */
 const GOB_META={
   torch:{idle:[0,6],run:[1,6],atk:[2,6]},
@@ -87,6 +96,14 @@ let MUSIC=null, meleeAlt=false, lastCoinS=0;
       if(typeof G!=='undefined'&&G&&typeof buildUnitButtons==='function')buildUnitButtons();
     };
     im.src='assets/ts/gob_'+c+'_'+u+'.png';
+  }
+  for(const k in HERO_TANK_ANIMS){
+    const im=new Image();
+    im.onload=()=>{
+      ASSETS.heroTank[k]=im;
+      if(k==='idle'&&typeof G!=='undefined'&&G&&typeof buildUnitButtons==='function')buildUnitButtons();
+    };
+    im.src='assets/era3/engineer_tank/'+HERO_TANK_ANIMS[k].file+'.png';
   }
   const misc={castle_blue:1,castle_red:1,castle_destroyed:1,arrow:1,explosion:1,dynamite:1};
   for(const k in misc){

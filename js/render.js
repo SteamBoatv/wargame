@@ -23,7 +23,7 @@ function drawDeco(d){
 }
 function drawBase(side){
   const b=side?BASE1:BASE0;
-  const era2=G&&(side?G.aiEra:G.era)===2;
+  const era2=G&&(side?G.aiEra:G.era)>=2;
   const M=ASSETS.ts.misc;
   const dead=G&&G.over&&G.baseHp[side]<=0;
   const cimg=M&&(dead?M.castle_destroyed:(side?M.castle_red:M.castle_blue));
@@ -169,20 +169,116 @@ function drawMechUnit(u,p,st,fdir){
   ctx.drawImage(img,fi*cell,0,cell,cell,-dw/2,-dw+8,dw,dw);
   return true;
 }
+function tankFrame(key,t,dur,loop){
+  const meta=HERO_TANK_ANIMS[key], n=meta?meta.frames:1;
+  if(loop)return Math.floor(t/dur*n)%n;
+  return Math.min(n-1,Math.floor(clamp(t/dur,0,0.999)*n));
+}
+/* CraftPix 坦克全部是 96×96 单行图。统一格底锚点，空投/维修特效只改局部坐标，
+   不改精灵本体的基线，避免生成素材曾出现的逐帧抖动。 */
+function drawHeroTank(u,p,st,fdir){
+  let key='idle',fi=0,oy=0,gasKey='',gasFi=0;
+  const hs=u.heroState||'', ht=u.heroStateT||0;
+  if(hs==='airdrop'){
+    const q=clamp(ht/HERO_TANK.dropDur,0,1), ease=1-Math.pow(1-q,3);
+    oy=-190*(1-ease);
+    const ca=clamp((0.92-q)/0.28,0,1);
+    ctx.save();
+    ctx.globalAlpha=ca;
+    ctx.fillStyle='#c9e6a8';
+    ctx.fillRect(-42,oy-86,84,8);ctx.fillRect(-34,oy-94,68,8);ctx.fillRect(-18,oy-102,36,8);
+    ctx.fillStyle='#6f9c67';
+    ctx.fillRect(-42,oy-80,84,4);ctx.fillRect(-4,oy-94,8,14);
+    ctx.strokeStyle='rgba(225,240,205,.9)';ctx.lineWidth=1.5;
+    ctx.beginPath();
+    ctx.moveTo(-37,oy-79);ctx.lineTo(-25,oy-28);
+    ctx.moveTo(37,oy-79);ctx.lineTo(25,oy-28);
+    ctx.moveTo(-5,oy-91);ctx.lineTo(-13,oy-28);
+    ctx.moveTo(5,oy-91);ctx.lineTo(13,oy-28);
+    ctx.stroke();
+    ctx.restore();
+    key='idle';fi=tankFrame(key,ht,0.72,true);
+  }else if(hs==='startup'){
+    const dust=clamp(1-ht/0.75,0,1);
+    if(dust>0){
+      ctx.save();ctx.globalAlpha=dust;ctx.fillStyle='#b9a27a';
+      for(let i=0;i<7;i++){
+        const a=i/7*TAU, r=(1-dust)*46+12;
+        ctx.fillRect(Math.cos(a)*r-3,-4+Math.sin(a)*r*0.2,6,4);
+      }
+      ctx.restore();
+    }
+    key='turn';fi=tankFrame(key,ht,HERO_TANK.startupDur,false);
+  }else if(hs==='repair_open'){
+    key='moveOut';fi=tankFrame(key,ht,HERO_TANK.repairOpen,false);
+  }else if(hs==='repair_loop'){
+    key='special';fi=tankFrame(key,ht,HERO_TANK.repairLoop,true);
+  }else if(hs==='repair_close'){
+    key='moveIn';fi=tankFrame(key,ht,HERO_TANK.repairClose,false);
+  }else if(u.dying){
+    key='death';fi=tankFrame(key,u.dying,0.45,false);
+  }else if(u.heroHurtT>0){
+    key='hurt';fi=tankFrame(key,0.18-u.heroHurtT,0.18,false);
+  }else{
+    const at=u.atkT||9, a0=HERO_TANK.attackStart, a1=a0+HERO_TANK.attackCycle;
+    const a2=a1+HERO_TANK.attackEnd;
+    if(at<a0){gasKey='gasStart';gasFi=tankFrame(gasKey,at,a0,false);}
+    else if(at<a1){gasKey='gasCycle';gasFi=tankFrame(gasKey,at-a0,HERO_TANK.attackCycle,true);}
+    else if(at<a2){gasKey='gasEnd';gasFi=tankFrame(gasKey,at-a1,HERO_TANK.attackEnd,false);}
+    if(gasKey){
+      /* Gas_* 只有喷雾特效，不含车体：攻击时车体继续播放稳定的待机循环。 */
+      key='idle';fi=tankFrame(key,(G?G.t:0)+(u.off||0)*0.03,0.75,true);
+    }else if(u.moving){key='drive';fi=tankFrame(key,u.animT||0,0.7,true);}
+    else{key='idle';fi=tankFrame(key,(G?G.t:0)+(u.off||0)*0.03,0.75,true);}
+  }
+  if(hs.startsWith('repair')){
+    const pulse=0.45+0.25*Math.sin((G?G.t:0)*7);
+    ctx.save();
+    ctx.globalAlpha=pulse;ctx.strokeStyle='#59ff91';ctx.lineWidth=3;
+    ctx.beginPath();ctx.ellipse(0,2,34,10,0,0,TAU);ctx.stroke();
+    ctx.fillStyle='#70ff9c';
+    for(let i=0;i<3;i++){
+      const t=(G?G.t:0)*0.55+i/3, py=-24-(t%1)*42, px=Math.sin(t*9+i)*30;
+      ctx.globalAlpha=0.9-(t%1)*0.6;
+      ctx.fillRect(px-2,py-7,4,14);ctx.fillRect(px-7,py-2,14,4);
+    }
+    ctx.restore();
+  }
+  if(p.tx*fdir<-0.05)ctx.scale(-1,1);
+  const img=ASSETS.heroTank&&ASSETS.heroTank[key];
+  if(!img)return false;
+  const dw=112;
+  if(gasKey){
+    const gas=ASSETS.heroTank&&ASSETS.heroTank[gasKey];
+    if(gas){
+      /* 原特效从格子的左边缘向右生长；把该边缘对齐车体右侧炮口。
+         先画毒雾再画车体，交界处由炮口覆盖，车身始终清晰可辨。 */
+      ctx.drawImage(gas,gasFi*96,0,96,96,48,-93,dw,dw);
+    }
+  }
+  ctx.drawImage(img,fi*96,0,96,96,-dw/2,-dw+8+oy,dw,dw);
+  return true;
+}
 function drawUnit(u,p){
   const st=UNITS[u.type], dir=u.side?-1:1;
   const fdir=u.back?-dir:dir;   /* 守备队后撤归位时朝向反过来 */
   if(st.cls==='bldg'){drawBuilding(u,p,st);return;}
   const vr=u.vet?VET_RANKS[u.vet]:null;
+  const hero=!!st.heroTank, ew=hero?25:13, eh=hero?8:5;
   ctx.fillStyle='rgba(0,0,0,.2)';
-  ctx.beginPath(); ctx.ellipse(p.x,p.y+3,13,5,0,0,TAU); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(p.x,p.y+3,ew,eh,0,0,TAU); ctx.fill();
   ctx.strokeStyle=u.side?'rgba(255,64,64,.75)':'rgba(46,125,255,.75)';
   ctx.lineWidth=2;
-  ctx.beginPath(); ctx.ellipse(p.x,p.y+3,13,5,0,0,TAU); ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(p.x,p.y+3,ew,eh,0,0,TAU); ctx.stroke();
   if(st.era===2){
     ctx.strokeStyle='rgba(255,215,106,.9)';
     ctx.lineWidth=1.5;
     ctx.beginPath(); ctx.ellipse(p.x,p.y+3,16,6.5,0,0,TAU); ctx.stroke();
+  }
+  if(st.era===3){
+    ctx.strokeStyle='rgba(65,244,209,.92)';
+    ctx.lineWidth=2.5;
+    ctx.beginPath();ctx.ellipse(p.x,p.y+3,30,10,0,0,TAU);ctx.stroke();
   }
   if(vr){
     /* 老兵脚下加一圈呼吸光环：即使精灵本身被挡住也能一眼认出场上的老兵 */
@@ -194,7 +290,8 @@ function drawUnit(u,p){
     ctx.globalAlpha=1;
   }
   ctx.save();
-  ctx.translate(p.x+p.tx*dir*u.lunge*10, p.y+p.ty*dir*u.lunge*10);
+  const lng=hero?0:u.lunge*10;
+  ctx.translate(p.x+p.tx*dir*lng, p.y+p.ty*dir*lng);
   if(vr){
     ctx.scale(vr.scale,vr.scale);       /* 体型随军衔变大 */
     if(vr.blur){                        /* 精灵外发光＝描边效果，一次 drawImage 搞定 */
@@ -205,14 +302,16 @@ function drawUnit(u,p){
   if(u.dying){
     const k=Math.min(1,u.dying/0.45);
     ctx.globalAlpha=1-k;
-    ctx.rotate(dir*k*1.5);
-  }else if(u.moving){
+    if(!hero)ctx.rotate(dir*k*1.5);
+  }else if(u.moving&&!hero){
     ctx.translate(0,-Math.abs(Math.sin(u.walk))*3.5);
   }
   const gobSheet=st.gob?(ASSETS.gob[gobColorOf(st)]||{})[st.gob]:null;
   const set=st.ts?ASSETS.ts[unitColor(u.side,st)]:null;
   const runImg=set?set[TS_UNITS[st.ts].run]:null;
-  if(st.mech&&drawMechUnit(u,p,st,fdir)){
+  if(st.heroTank&&drawHeroTank(u,p,st,fdir)){
+    /* 时代 III 工程师英雄 */
+  }else if(st.mech&&drawMechUnit(u,p,st,fdir)){
     /* 机械单位已绘制 */
   }else if(gobSheet){
     const meta=GOB_META[st.gob];
@@ -250,10 +349,10 @@ function drawUnit(u,p){
     ctx.fillText(st.emoji,0,-16);
   }
   ctx.restore();
-  if(!u.dying){
-    const w=34,h=5,r=Math.max(0,u.hp/u.max);
+  if(!u.dying&&!(hero&&(u.heroState==='airdrop'||u.heroState==='startup'))){
+    const w=hero?62:34,h=hero?7:5,r=Math.max(0,u.hp/u.max);
     /* 血条跟随精灵实际高度：机械单位按 mpx 缩放，高度差异很大 */
-    let by=45;
+    let by=hero?86:45;
     if(st.mech){
       /* 用内容高度而非图集格高，否则血条会飘到单位头顶很远的空白处 */
       const mm=MECH_META[st.mech];
@@ -261,8 +360,14 @@ function drawUnit(u,p){
     }
     ctx.fillStyle='rgba(0,0,0,.45)';
     ctx.fillRect(p.x-w/2-1,p.y-by,w+2,h+2);
-    ctx.fillStyle=u.side?'#ff5a5a':'#43d675';
+    const repairing=hero&&u.heroState&&u.heroState.startsWith('repair');
+    ctx.fillStyle=repairing?'#3cff78':(u.side?'#ff5a5a':'#43d675');
     ctx.fillRect(p.x-w/2,p.y-by+1,w*r,h);
+    if(repairing&&r>0){
+      const hx=p.x-w/2+((G?G.t:0)*34%(Math.max(8,w*r)));
+      ctx.fillStyle='rgba(210,255,222,.85)';
+      ctx.fillRect(Math.min(p.x+w/2-5,hx),p.y-by+1,5,h);
+    }
     if(vr){
       ctx.font=em(13);
       ctx.textAlign='center'; ctx.textBaseline='middle';
@@ -501,7 +606,7 @@ function drawMinimap(){
     ctx.fillStyle=u.side?'#ff8080':'#7db3ff';
     ctx.fillRect(mx+p.x*k-1.5,my+p.y*k-1.5,3,3);
   }
-  const vw=Math.min(cssW/cam.z*k,mw), vh=Math.min(cssH/cam.z*k,mh);
+  const vw=Math.min(cssW/cam.z*k,mw), vh=Math.min(viewH/cam.z*k,mh);
   const rx=clamp(mx+cam.x*k-vw/2,mx,mx+mw-vw), ry=clamp(my+cam.y*k-vh/2,my,my+mh-vh);
   ctx.strokeStyle='rgba(255,255,255,.85)'; ctx.lineWidth=1;
   ctx.strokeRect(rx,ry,vw,vh);
@@ -515,10 +620,10 @@ function draw(){
   let sx=0, sy=0;
   if(G&&G.shake>0){sx=rand(-6,6)*G.shake;sy=rand(-6,6)*G.shake;}
   const z=cam.z;
-  ctx.setTransform(dpr*z,0,0,dpr*z,dpr*(cssW/2-(cam.x+sx)*z),dpr*(cssH/2-(cam.y+sy)*z));
-  ctx.drawImage(ground,0,0);
+  ctx.setTransform(dpr*z,0,0,dpr*z,dpr*(cssW/2-(cam.x+sx)*z),dpr*(viewCY-(cam.y+sy)*z));
+  ctx.drawImage(ground,0,-WORLD_VIEW_TOP_PAD);
   const vx0=cam.x-cssW/2/z-60, vx1=cam.x+cssW/2/z+60;
-  const vy0=cam.y-cssH/2/z-80, vy1=cam.y+cssH/2/z+80;
+  const vy0=cam.y-viewCY/z-80, vy1=cam.y+(cssH-viewCY)/z+80;
   const spr=[];
   for(const d of DECOS)
     if(d.x>vx0&&d.x<vx1&&d.y>vy0&&d.y<vy1)spr.push({y:d.y,k:0,o:d,p:null});

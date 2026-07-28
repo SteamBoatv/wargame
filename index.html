@@ -62,8 +62,12 @@
     <div class="units-tip">
       <span>🗡️剑士 克长枪</span><span>🔱长枪 克重盾/爆破</span><span>🛡️盾卫 挡箭减伤</span><span>🏹弓手 克步兵/修士</span><span>✝️修士 治疗友军</span><span>🚜攻城/机甲 克建筑</span>
     </div>
-    <p style="margin:0">选择指挥官：</p>
-    <div class="diffs" id="cmdrPickMenu"></div>
+    <!-- 主菜单的指挥官选择只服务于当前封存的单人远征。
+         PvP 会在双方连接后于大厅内独立选人，避免在入口页造成“已为 PvP 选定”的误解。 -->
+    <div hidden>
+      <p style="margin:0">选择指挥官：</p>
+      <div class="diffs" id="cmdrPickMenu"></div>
+    </div>
     <div class="diffs">
       <button class="obtn" id="btnPvp">⚔️ 好友对战（P2P）</button>
     </div>
@@ -153,17 +157,17 @@
      "HTML 已更新、JS 还是旧的"这种最难查的混版状态。
      改动线材协议时（UNITS 顺序 / COMMANDERS 键 / 快照字段）连同 net.js 的 appId
      与 telemetry.js 的 TELE_VER 一起升，三者保持同步。 -->
-<script src="js/core.js?v=20260728a"></script>
-<script src="js/data.js?v=20260728a"></script>
-<script src="js/world.js?v=20260728a"></script>
-<script src="js/camera.js?v=20260728a"></script>
-<script src="js/audio_assets.js?v=20260728a"></script>
-<script src="js/game.js?v=20260728a"></script>
-<script src="js/render.js?v=20260728a"></script>
-<script src="js/ui.js?v=20260728a"></script>
-<script src="js/net.js?v=20260728a"></script>
-<script src="js/netdiag.js?v=20260728a"></script>
-<script src="js/telemetry.js?v=20260728a"></script>
-<script src="js/main.js?v=20260728a"></script>
+<script src="js/core.js?v=20260728e"></script>
+<script src="js/data.js?v=20260728e"></script>
+<script src="js/world.js?v=20260728e"></script>
+<script src="js/camera.js?v=20260728e"></script>
+<script src="js/audio_assets.js?v=20260728e"></script>
+<script src="js/game.js?v=20260728e"></script>
+<script src="js/render.js?v=20260728e"></script>
+<script src="js/ui.js?v=20260728e"></script>
+<script src="js/net.js?v=20260728e"></script>
+<script src="js/netdiag.js?v=20260728e"></script>
+<script src="js/telemetry.js?v=20260728e"></script>
+<script src="js/main.js?v=20260728e"></script>
 </body>
 </html>

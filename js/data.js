@@ -41,10 +41,20 @@ const UNITS={
   torch2:{emoji:'🔥',name:'狂焰暴徒',cls:'inf',   gob:'torch', era:2,w:30,cost:75, hp:145,dmg:19,cd:0.7,range:28, speed:95,build:1.2},
   tnt2:{emoji:'🧨',name:'炸药狂人',cls:'ranged',gob:'tnt',   era:2,w:16,cost:170,hp:130,dmg:36,cd:1.7,range:190,speed:55,build:2.1,proj:'dynamite',splash:65},
   barrel2:{emoji:'💣',name:'爆桶暴徒',cls:'bomb',  gob:'barrel',era:2,w:14,cost:150,hp:262,dmg:78,cd:1,  range:26, speed:85,build:1.8,splash:60},
+  /* ---- 时代 III 限量英雄（必须继续追加，勿移动到所属阵营旁边） ----
+     hero 独立分类：当前没有 COUNTER 对它提供额外倍率；仍会正常承受所有普通伤害。 */
+  eng_tank3:{emoji:'🛠️',name:'工程喷射坦克',cls:'hero',heroTank:true,era:3,w:8,cost:650,
+             hp:1250,dmg:44,cd:1.8,range:84,speed:25,build:12,maxAlive:1,noVet:true},
 };
-const ERA_ROSTER={
-  1:['sword','spear','archer','shield','monk'],
-  2:['sword2','spear2','archer2','shield2','monk2'],
+/* 工程喷射坦克的首轮状态机与平衡参数。产品结论及素材缺口的唯一台账：
+   docs/ERA3_ASSET_AND_DESIGN_TODO.md */
+const HERO_TANK={
+  unit:'eng_tank3',
+  states:['','airdrop','startup','repair_open','repair_loop','repair_close'],
+  dropDur:2.8,startupDur:2.0,
+  combatQuiet:1.5,repairThreshold:0.04,repairCap:0.10,repairPulse:0.02,
+  repairLoop:1.25,repairOpen:0.8,repairClose:0.8,repairCd:9,
+  attackStart:0.55,attackCycle:0.70,attackEnd:0.55,
 };
 const COUNTER={ /* 克制环：剑克枪/建筑 → 枪克盾/爆破/攻城 → 盾挡箭 → 弓克步兵/修士；攻城重克建筑 */
   inf:{spear:1.5,bldg:1.6},
@@ -53,7 +63,7 @@ const COUNTER={ /* 克制环：剑克枪/建筑 → 枪克盾/爆破/攻城 → 
   siege:{bldg:2.5,tank:1.3,bomb:1.5},   /* 攻城车碾滚桶：否则 siege 对军阀阵容全线无克制 */
   bomb:{bldg:1.8},
 };
-const CLS_NAME={inf:'步兵',spear:'枪兵',ranged:'远程',tank:'重甲',heal:'修士',bomb:'爆破',siege:'攻城',bldg:'建筑'};
+const CLS_NAME={inf:'步兵',spear:'枪兵',ranged:'远程',tank:'重甲',heal:'修士',bomb:'爆破',siege:'攻城',hero:'英雄',bldg:'建筑'};
 /* 机械素材几何：cell=方形图集格边长，ch=格内实际内容高度（源像素，内容贴格底对齐）。
    由 build_mech_assets.py 输出的 assets/mech/meta.json 同步而来，改素材后需一并更新。 */
 const MECH_META={
@@ -66,14 +76,18 @@ const COMMANDERS={
     icon:'⚖️',art:'assets/art/cmdr_marshal.png',name:'王国元帅',
     desc:'均衡之道：五兵种克制环 · 挖矿经济 · 空降守备队',
     income:8,killMult:0.35,mining:true,
-    roster:{1:['sword','spear','archer','shield','monk'],2:['sword2','spear2','archer2','shield2','monk2']},
+    roster:{1:['sword','spear','archer','shield','monk'],
+            2:['sword2','spear2','archer2','shield2','monk2'],
+            3:['sword2','spear2','archer2','shield2','monk2']},
     place:['airdrop'],
   },
   engineer:{
     icon:'🏗️',art:'assets/art/cmdr_engineer.png',name:'机械军团',
-    desc:'钢铁阵地：路障锁路 · 激光塔火力 · 前线反应堆经济（越靠前产量越高）· 机械化部队',
+    desc:'钢铁阵地：路障锁路 · 激光塔火力 · 前线反应堆经济 · 时代 III 空投喷射坦克',
     income:6,killMult:0.3,mining:false,
-    roster:{1:['militia','crossbow','ram'],2:['militia2','crossbow2','ram2']},
+    roster:{1:['militia','crossbow','ram'],
+            2:['militia2','crossbow2','ram2'],
+            3:['militia2','crossbow2','ram2','eng_tank3']},
     place:['barricade','tower','workshop','strike'],
   },
   /* 第三条经济路线：不投资、不积累，收入靠"把部队压进敌方半场"现抢。
@@ -83,7 +97,7 @@ const COMMANDERS={
     icon:'⚔️',art:'assets/art/cmdr_warlord.png',name:'掠夺军阀',
     desc:'以战养战：部队踏入敌方半场即掠夺产金 · 高额人头赏金 · 匪群突袭 · 无坦克无治疗',
     income:3,killMult:0.5,mining:false,plunder:true,
-    roster:{1:['torch','tnt','barrel'],2:['torch2','tnt2','barrel2']},
+    roster:{1:['torch','tnt','barrel'],2:['torch2','tnt2','barrel2'],3:['torch2','tnt2','barrel2']},
     place:['horde'],
   },
 };
@@ -167,7 +181,15 @@ function wsYield(u){ /* 反应堆产量：位置基础 2~6/秒 × 等级倍率�
   return (2+4*clamp((f-0.08)/0.84,0,1))*WS_UP[u.wlv||1].mul;
 }
 const BASE_HP=900, KILL_REWARD=0.35, QUEUE_MAX=5, INCOME_STEP=3, INCOME_MAX_LVL=10;
-const EVOLVE_XP=300, EVOLVE_COST=500, FLAG_INCOME=3, FLAG_RANGE=90, FLAG_TIME=3;
+const EVOLVE_XP=300, EVOLVE_COST=500, EVOLVE_XP3=600, EVOLVE_COST3=800, ERA_MAX=3;
+const evolveXpReq=era=>era===1?EVOLVE_XP:EVOLVE_XP3;
+const evolveCostReq=era=>era===1?EVOLVE_COST:EVOLVE_COST3;
+function evolveProgress(era,xp){
+  if(era>=ERA_MAX)return 1;
+  const lo=era===1?0:EVOLVE_XP, hi=evolveXpReq(era);
+  return clamp((xp-lo)/(hi-lo),0,1);
+}
+const FLAG_INCOME=3, FLAG_RANGE=90, FLAG_TIME=3;
 /* 老兵晋升：按累计击杀升阶。晋升"不回血"——只是获得自动再生的能力；
    同时最大生命上限提高，所以血条比例会立刻变低，再靠再生慢慢补满。
    aura=地面光环粗细，blur=精灵外发光（贵，只给稀有的高军衔用，见 render.js drawUnit） */

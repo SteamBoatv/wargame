@@ -2,6 +2,9 @@
 /* ---------------- 战场世界（每关随机生成：S路 / 岔路 / 隘口 / 哨站） ---------------- */
 const WORLD_W=1200;
 const FORK_SEP=112;
+/* 路线终点正好落在 WORLD_H；底部城堡和基地圆台会继续向外伸出。
+   这两段只扩展可视边界，不参与寻路、战斗或联机地图数据。 */
+const WORLD_VIEW_TOP_PAD=80, WORLD_VIEW_BOTTOM_PAD=150;
 let WORLD_H=2000;
 let PATH=null, L=0, BASE0=null, BASE1=null, DECOS=[], CUR_DEF=null;
 
@@ -120,28 +123,30 @@ function paintGround(){
   if(!PATH)return;
   const g=ground.getContext('2d');
   g.imageSmoothingEnabled=false;
+  const paintH=ground.height;
   const Pimg=ASSETS.img.props;
   if(Pimg){
     const t=document.createElement('canvas'); t.width=48; t.height=32;
     const tc=t.getContext('2d');
     for(let i=0;i<6;i++)tc.drawImage(Pimg,(9+i)*16,0,16,16,(i%3)*16,((i/3)|0)*16,16,16);
     const pat=g.createPattern(t,'repeat');
-    g.save(); g.scale(2,2); g.fillStyle=pat; g.fillRect(0,0,WORLD_W/2,WORLD_H/2); g.restore();
+    g.save(); g.scale(2,2); g.fillStyle=pat; g.fillRect(0,0,WORLD_W/2,paintH/2); g.restore();
   }else{
-    g.fillStyle='#7db958'; g.fillRect(0,0,WORLD_W,WORLD_H);
+    g.fillStyle='#7db958'; g.fillRect(0,0,WORLD_W,paintH);
   }
   for(let i=0;i<140;i++){
     g.fillStyle=Math.random()<0.5?'rgba(255,255,255,0.05)':'rgba(40,90,20,0.07)';
     g.beginPath();
-    g.ellipse(rand(0,WORLD_W),rand(0,WORLD_H),rand(30,90),rand(20,60),rand(0,3.14),0,TAU);
+    g.ellipse(rand(0,WORLD_W),rand(0,paintH),rand(30,90),rand(20,60),rand(0,3.14),0,TAU);
     g.fill();
   }
   /* 道路：1/4 分辨率像素化；岔路区画双车道 */
   const RS=4;
   const rc=document.createElement('canvas');
-  rc.width=Math.ceil(WORLD_W/RS); rc.height=Math.ceil(WORLD_H/RS);
+  rc.width=Math.ceil(WORLD_W/RS); rc.height=Math.ceil(paintH/RS);
   const r=rc.getContext('2d');
   r.scale(1/RS,1/RS);
+  r.translate(0,WORLD_VIEW_TOP_PAD);
   r.lineCap='round'; r.lineJoin='round';
   for(const pass of [['#8a6b45',160,100],['#c2a36b',144,86]]){
     r.strokeStyle=pass[0];
@@ -177,7 +182,7 @@ function paintGround(){
     r.strokeStyle='#8a6b45'; r.lineWidth=8; r.stroke();
   }
   g.imageSmoothingEnabled=false;
-  g.drawImage(rc,0,0,WORLD_W,WORLD_H);
+  g.drawImage(rc,0,0,WORLD_W,paintH);
 }
 
 /* 重建整个战场世界（每关调用一次） */
@@ -190,7 +195,7 @@ function buildWorld(def){
   BASE1=pathPos(L);
   DECOS=genDecos();
   ground.width=WORLD_W;
-  ground.height=WORLD_H;
+  ground.height=WORLD_VIEW_TOP_PAD+WORLD_H+WORLD_VIEW_BOTTOM_PAD;
   paintGround();
 }
 buildWorld(null);
