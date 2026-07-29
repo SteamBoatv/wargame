@@ -380,13 +380,15 @@ function drawUnit(u,p){
     /* 机械单位已绘制 */
   }else if(gobSheet){
     const meta=GOB_META[st.gob];
-    let row,n,fi;
-    if(u.atkT<meta.atk[1]*0.1){row=meta.atk[0];n=meta.atk[1];fi=Math.min(n-1,Math.floor(u.atkT*10));}
-    else if(u.moving){row=meta.run[0];n=meta.run[1];fi=Math.floor(u.animT*10)%n;}
-    else{row=meta.idle[0];n=meta.idle[1];fi=((Math.floor((G?G.t:0)*8+u.off))%n+n)%n;}
+    const atkN=gobAnimCount(meta,'atk');
+    let action,n,fi;
+    if(u.atkT<atkN*0.1){action='atk';n=atkN;fi=Math.min(n-1,Math.floor(u.atkT*10));}
+    else if(u.moving){action='run';n=gobAnimCount(meta,action);fi=Math.floor(u.animT*10)%n;}
+    else{action='idle';n=gobAnimCount(meta,action);fi=((Math.floor((G?G.t:0)*8+u.off))%n+n)%n;}
+    const gf=gobAnimFrame(meta,action,fi);
     if(p.tx*fdir<-0.05)ctx.scale(-1,1);
     const dw=66;
-    ctx.drawImage(gobSheet,fi*192,row*192,192,192,-dw/2,-dw*0.74,dw,dw);
+    ctx.drawImage(gobSheet,gf.sx,gf.sy,gf.cell,gf.cell,-dw/2,-dw*0.74,dw,dw);
   }else if(runImg){
     const atkImg=set[TS_UNITS[st.ts].atk], idleImg=set[TS_UNITS[st.ts].idle];
     let img,fi;

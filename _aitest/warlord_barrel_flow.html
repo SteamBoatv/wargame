@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>滚桶兵动画验收</title>
+  <style>
+    *{box-sizing:border-box}
+    html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#111;color:#fff;font-family:system-ui,"Microsoft YaHei",sans-serif}
+    iframe{display:block;width:100%;height:100%;border:0}
+    #qa{position:fixed;z-index:100;top:10px;left:50%;transform:translateX(-50%);
+      padding:7px 11px;border:1px solid #ffd76a;background:rgba(20,12,4,.9);
+      box-shadow:0 4px 20px rgba(0,0,0,.45);font-size:13px;pointer-events:none;white-space:nowrap}
+  </style>
+</head>
+<body>
+  <iframe id="game" src="../index.html?qa=barrel-20260729a"></iframe>
+  <div id="qa">滚桶兵动画验收 · <span id="state">加载中</span></div>
+  <script>
+    const frame=document.querySelector('#game');
+    const state=document.querySelector('#state');
+    const params=new URLSearchParams(location.search);
+    const action=params.get('action')==='attack'?'attack':'walk';
+    const era=params.get('era')==='2'?2:1;
+    const unitKey=era===2?'barrel2':'barrel';
+    const requestedFrame=Math.max(0,Number(params.get('frame'))||0);
+
+    function startScenario(){
+      frame.contentWindow.eval(`(()=>{
+        mode='play';paused=true;gameSpeed=1;RUN=null;
+        const per={...PVP_PER,queue:0,evolve:false};
+        newGame({per,cmdr0:'warlord',cmdr1:'marshal',events:[],node:{t:'pvp'},
+          aiEra:1,hpMul:1,dmgMul:1,aiIncomeMul:1,mapDef:genMapDef({noFork:true})});
+        G.pvp=false;G.money=9999;G.aiMoney=0;G.era=${era};G.aiEra=1;
+        ['menu','mapov','pvpov','gameover','pauseov','runover'].forEach(id=>{
+          const e=$(id);if(e)e.classList.add('hidden');
+        });
+        G.units.length=0;
+        spawnUnit(0,'${unitKey}');
+        const u=G.units[0];
+        u.s=L*0.5;u.off=0;u.lunge=0;
+        if('${action}'==='attack'){
+          u.moving=false;u.atkT=${requestedFrame}/10;u.animT=0;
+          spawnUnit(1,'shield');
+          const foe=G.units[1];foe.s=u.s+42;foe.off=0;foe.moving=false;foe.atkT=99;
+        }else{
+          u.moving=true;u.atkT=99;u.animT=${requestedFrame}/10;
+        }
+        const p=unitPos(u);
+        cam.x=p.x;cam.y=p.y-8;cam.z=2.4;clampCam();setFollow(false);
+        buildUnitButtons();refreshHUD();draw();
+        globalThis.__barrelQa={action:'${action}',frame:${requestedFrame},unit:u};
+      })()`);
+      state.textContent='era '+era+' · '+action+' · frame '+requestedFrame;
+    }
+
+    let bootTimer=null;
+    function bootScenario(){
+      clearTimeout(bootTimer);
+      try{
+        const ready=frame.contentWindow.eval(
+          `typeof newGame==='function'&&typeof spawnUnit==='function'&&
+           typeof GOB_META==='object'&&ASSETS.gob.red.barrel&&
+           ASSETS.gob.red.barrel.complete&&ASSETS.gob.red.barrel.naturalWidth>0`
+        );
+        if(!ready){bootTimer=setTimeout(bootScenario,100);return}
+        startScenario();
+      }catch(e){bootTimer=setTimeout(bootScenario,100)}
+    }
+    frame.addEventListener('load',bootScenario);
+  </script>
+</body>
+</html>

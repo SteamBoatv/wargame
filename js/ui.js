@@ -132,15 +132,15 @@ function buildUnitButtons(){
     const hIdle=st.heroTank&&ASSETS.heroTank?ASSETS.heroTank.idle:null;
     const rIdle=st.heroRanger&&ASSETS.heroRanger?ASSETS.heroRanger.idle:null;
     const set=st.ts?ASSETS.ts[G&&G.era>=2?'black':'blue']:null;
-    /* 哥布林是 192px 多行图集，不能套用单行逻辑：单独取 idle 行的第 0 帧 */
+    /* 哥布林是多行图集，且滚桶兵使用独立的 128px 网格：通过元数据取 idle 首帧。 */
     const gSheet=st.gob?((ASSETS.gob&&ASSETS.gob[st.era===2?'purple':'red'])||{})[st.gob]:null;
     const idle=hIdle||rIdle||mIdle||(set?set[TS_UNITS[st.ts].idle]:null);
     if(gSheet){
       b.innerHTML='<canvas class="be bi" width="40" height="40"></canvas><span class="bn">'+label+'</span><span class="bc">💰'+st.cost+'</span>';
       const cc=b.querySelector('canvas').getContext('2d');
       cc.imageSmoothingEnabled=false;
-      const row=(GOB_META[st.gob]||{idle:[0,1]}).idle[0];
-      cc.drawImage(gSheet,192*0.24,row*192+192*0.18,192*0.52,192*0.60,0,0,40,40);
+      const meta=GOB_META[st.gob],gf=gobAnimFrame(meta,'idle',0),cell=gf.cell;
+      cc.drawImage(gSheet,gf.sx+cell*0.24,gf.sy+cell*0.18,cell*0.52,cell*0.60,0,0,40,40);
     }else if(idle){
       b.innerHTML='<canvas class="be bi" width="40" height="40"></canvas><span class="bn">'+label+'</span><span class="bc">💰'+st.cost+'</span>';
       const cc=b.querySelector('canvas').getContext('2d');

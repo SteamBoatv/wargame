@@ -66,12 +66,30 @@ const HERO_RANGER_ANIMS={
   ram:{file:'Attack3',frames:4},retreat:{file:'Attack4',frames:6},
   hurt:{file:'Hurt',frames:2},death:{file:'Death',frames:6},bullet:{file:'Bullet',frames:2,cell:6},
 };
-/* 哥布林多行动画表：[行, 帧数] */
+/* 哥布林多行动画表。
+   常规图集用 [行, 帧数]；滚桶兵来自旧版 128px 图集，动作会跨行，改用 [列, 行] 显式帧坐标。 */
 const GOB_META={
-  torch:{idle:[0,6],run:[1,6],atk:[2,6]},
-  tnt:{idle:[0,6],run:[1,6],atk:[2,7]},
-  barrel:{idle:[0,3],run:[1,4],atk:[1,4]},
+  torch:{cell:192,idle:[0,6],run:[1,6],atk:[2,6]},
+  tnt:{cell:192,idle:[0,6],run:[1,6],atk:[2,7]},
+  barrel:{
+    cell:128,
+    idle:[[0,0]],
+    run:[[0,1],[1,1],[2,1],[3,1],[4,1],[5,1],[0,2]],
+    atk:[[0,3],[1,3],[2,3],[3,3],[4,3],[5,3]],
+    death:[[0,4],[1,4],[2,4],[0,5],[1,5],[2,5]],
+  },
 };
+function gobAnimCount(meta,action){
+  const spec=meta[action];
+  return Array.isArray(spec[0])?spec.length:spec[1];
+}
+function gobAnimFrame(meta,action,fi){
+  const spec=meta[action],cell=meta.cell||192;
+  let col,row;
+  if(Array.isArray(spec[0]))[col,row]=spec[Math.min(spec.length-1,Math.max(0,fi))];
+  else{row=spec[0];col=Math.min(spec[1]-1,Math.max(0,fi));}
+  return {cell,sx:col*cell,sy:row*cell};
+}
 function unitColor(side,st){return side?(st.era===2?'purple':'red'):(st.era===2?'black':'blue');}
 const SFX={};
 let MUSIC=null, meleeAlt=false, lastCoinS=0;
